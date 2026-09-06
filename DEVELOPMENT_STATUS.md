@@ -2,7 +2,7 @@
 
 ## Current state
 
-The Fretboard Theory Explorer is working as a local React/Vite application with:
+El Localizador de teoría del diapasón de la guitarra funciona como una aplicación local de React/Vite con:
 
 - Scale, key, degree, notation, and extended-chord controls.
 - Harmonic major scale (`1, 2, 3, 4, 5, b6, 7`) in the scale catalog.

@@ -21,6 +21,12 @@ export interface ControlsPanelProps {
   onScaleIdChange: (scaleId: string) => void;
   degree: number;
   onDegreeChange: (degree: number) => void;
+  modeDegree: number;
+  onModeDegreeChange: (degree: number) => void;
+  modeDescriptions?: Record<number, string>;
+  modeFamily: 'major' | 'harmonic-minor' | 'melodic-minor';
+  onModeFamilyChange: (family: 'major' | 'harmonic-minor' | 'melodic-minor') => void;
+  showChordFunctions: boolean;
   diatonicChords: DiatonicChordInfo[];
   notation: NotationPreference;
   onNotationChange: (notation: NotationPreference) => void;
@@ -57,6 +63,12 @@ export function ControlsPanel({
   onScaleIdChange,
   degree,
   onDegreeChange,
+  modeDegree,
+  onModeDegreeChange,
+  modeDescriptions,
+  modeFamily,
+  onModeFamilyChange,
+  showChordFunctions,
   diatonicChords,
   notation,
   onNotationChange,
@@ -131,13 +143,21 @@ export function ControlsPanel({
             onVoicingTypeChange={onVoicingTypeChange}
           />
 
-          <DegreeSelector
-            chords={diatonicChords}
-            value={degree}
-            onChange={onDegreeChange}
-            labelMode={degreeLabelMode}
-            onLabelModeChange={onDegreeLabelModeChange}
-          />
+          {showChordFunctions && (
+            <DegreeSelector
+              chords={diatonicChords}
+              value={degree}
+              onChange={onDegreeChange}
+              extendedChords={extendedChords}
+              modeDegree={modeDegree}
+              onModeDegreeChange={onModeDegreeChange}
+              modeDescriptions={modeDescriptions}
+              modeFamily={modeFamily}
+              onModeFamilyChange={onModeFamilyChange}
+              labelMode={degreeLabelMode}
+              onLabelModeChange={onDegreeLabelModeChange}
+            />
+          )}
         </div>
       )}
     </section>

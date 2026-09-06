@@ -168,7 +168,7 @@ export const SCALE_LIBRARY: ScaleDefinition[] = [
   // ---------- MODOS DE LA ESCALA MAYOR ----------
   {
     id: 'ionian',
-    name: 'Mayor (Ionian)',
+    name: 'Mayor (Jonio)',
     category: 'major-modes',
     intervals: [0, 2, 4, 5, 7, 9, 11],
     intervalLabels: ['1', '2', '3', '4', '5', '6', '7'],
@@ -184,7 +184,7 @@ export const SCALE_LIBRARY: ScaleDefinition[] = [
   },
   {
     id: 'dorian',
-    name: 'Dórico',
+    name: 'Dorio',
     category: 'major-modes',
     intervals: [0, 2, 3, 5, 7, 9, 10],
     intervalLabels: ['1', '2', 'b3', '4', '5', '6', 'b7'],
@@ -220,7 +220,7 @@ export const SCALE_LIBRARY: ScaleDefinition[] = [
   },
   {
     id: 'aeolian',
-    name: 'Menor Natural (Aeolian)',
+    name: 'Menor Natural (Eoleo)',
     category: 'minor-modes',
     intervals: [0, 2, 3, 5, 7, 8, 10],
     intervalLabels: ['1', '2', 'b3', '4', '5', 'b6', 'b7'],
@@ -247,12 +247,120 @@ export const SCALE_LIBRARY: ScaleDefinition[] = [
     description: 'Menor natural con 7ma mayor. Sonido clásico/neoclásico.',
   },
   {
+    id: 'harmonic-minor-locrian-sharp6',
+    name: 'Locrio #6 (2º modo de menor armónica)',
+    category: 'harmonic-minor',
+    intervals: [0, 1, 3, 5, 6, 9, 10],
+    intervalLabels: ['1', 'b2', 'b3', '4', 'b5', '6', 'b7'],
+    parentScaleId: 'harmonic-minor',
+    description: 'Segundo modo de la menor armónica.',
+  },
+  {
+    id: 'harmonic-minor-ionian-sharp5',
+    name: 'Jonio #5 (3º modo de menor armónica)',
+    category: 'harmonic-minor',
+    intervals: [0, 2, 4, 5, 8, 9, 11],
+    intervalLabels: ['1', '2', '3', '4', '#5', '6', '7'],
+    parentScaleId: 'harmonic-minor',
+    description: 'Tercer modo de la menor armónica.',
+  },
+  {
+    id: 'harmonic-minor-dorian-sharp4',
+    name: 'Dorio #4 (4º modo de menor armónica)',
+    category: 'harmonic-minor',
+    intervals: [0, 2, 3, 6, 7, 9, 10],
+    intervalLabels: ['1', '2', 'b3', '#4', '5', '6', 'b7'],
+    parentScaleId: 'harmonic-minor',
+    description: 'Cuarto modo de la menor armónica.',
+  },
+  {
+    id: 'harmonic-minor-phrygian-dominant',
+    name: 'Frigio dominante (5º modo de menor armónica)',
+    category: 'harmonic-minor',
+    intervals: [0, 1, 4, 5, 7, 8, 10],
+    intervalLabels: ['1', 'b2', '3', '4', '5', 'b6', 'b7'],
+    parentScaleId: 'harmonic-minor',
+    description: 'Quinto modo de la menor armónica.',
+  },
+  {
+    id: 'harmonic-minor-lydian-sharp2',
+    name: 'Lidio #2 (6º modo de menor armónica)',
+    category: 'harmonic-minor',
+    intervals: [0, 3, 4, 6, 7, 8, 11],
+    intervalLabels: ['1', 'b3', '3', '#4', '5', 'b6', '7'],
+    parentScaleId: 'harmonic-minor',
+    description: 'Sexto modo de la menor armónica.',
+  },
+  {
+    id: 'harmonic-minor-ultralocrian',
+    name: 'Ultralocrio (7º modo de menor armónica)',
+    category: 'harmonic-minor',
+    intervals: [0, 1, 3, 4, 6, 8, 9],
+    intervalLabels: ['1', 'b2', 'b3', '3', 'b5', 'b6', '6'],
+    parentScaleId: 'harmonic-minor',
+    description: 'Séptimo modo de la menor armónica.',
+  },
+  {
     id: 'melodic-minor',
     name: 'Menor Melódica',
     category: 'melodic-minor',
     intervals: [0, 2, 3, 5, 7, 9, 11],
     intervalLabels: ['1', '2', 'b3', '4', '5', '6', '7'],
     description: 'Menor con 6ta y 7ma mayores. Muy usada en jazz.',
+  },
+  {
+    id: 'melodic-minor-dorian-flat2',
+    name: 'Dorio b2 (2º modo de menor melódica)',
+    category: 'melodic-minor',
+    intervals: [0, 1, 3, 5, 7, 9, 10],
+    intervalLabels: ['1', 'b2', 'b3', '4', '5', '6', 'b7'],
+    parentScaleId: 'melodic-minor',
+    description: 'Segundo modo de la menor melódica.',
+  },
+  {
+    id: 'melodic-minor-lydian-augmented',
+    name: 'Lidio aumentado (3º modo de menor melódica)',
+    category: 'melodic-minor',
+    intervals: [0, 2, 4, 6, 8, 9, 11],
+    intervalLabels: ['1', '2', '3', '#4', '#5', '6', '7'],
+    parentScaleId: 'melodic-minor',
+    description: 'Tercer modo de la menor melódica.',
+  },
+  {
+    id: 'melodic-minor-lydian-dominant',
+    name: 'Lidio dominante (4º modo de menor melódica)',
+    category: 'melodic-minor',
+    intervals: [0, 2, 4, 6, 7, 9, 10],
+    intervalLabels: ['1', '2', '3', '#4', '5', '6', 'b7'],
+    parentScaleId: 'melodic-minor',
+    description: 'Cuarto modo de la menor melódica.',
+  },
+  {
+    id: 'melodic-minor-mixolydian-flat6',
+    name: 'Mixolidio b6 (5º modo de menor melódica)',
+    category: 'melodic-minor',
+    intervals: [0, 2, 4, 5, 7, 8, 10],
+    intervalLabels: ['1', '2', '3', '4', '5', 'b6', 'b7'],
+    parentScaleId: 'melodic-minor',
+    description: 'Quinto modo de la menor melódica.',
+  },
+  {
+    id: 'melodic-minor-locrian-sharp2',
+    name: 'Locrio #2 (6º modo de menor melódica)',
+    category: 'melodic-minor',
+    intervals: [0, 2, 3, 5, 6, 8, 10],
+    intervalLabels: ['1', '2', 'b3', '4', 'b5', 'b6', 'b7'],
+    parentScaleId: 'melodic-minor',
+    description: 'Sexto modo de la menor melódica.',
+  },
+  {
+    id: 'melodic-minor-altered',
+    name: 'Alterada (7º modo de menor melódica)',
+    category: 'melodic-minor',
+    intervals: [0, 1, 3, 4, 6, 8, 10],
+    intervalLabels: ['1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7'],
+    parentScaleId: 'melodic-minor',
+    description: 'Séptimo modo de la menor melódica, también llamada superlocria.',
   },
 
   // ---------- PENTATÓNICAS ----------
@@ -314,6 +422,34 @@ export function getScaleById(scaleId: string): ScaleDefinition | undefined {
 /** Devuelve todas las escalas de una categoría dada, para agrupar en el selector UI */
 export function getScalesByCategory(category: ScaleCategory): ScaleDefinition[] {
   return SCALE_LIBRARY.filter((s) => s.category === category);
+}
+
+/** Devuelve la pentatónica asociada a cada grado de la escala mayor. */
+export function getMajorDegreePentatonic(
+  scale: ResolvedScale,
+  degree: number
+): { notes: PitchClass[]; intervalLabels: string[]; name: string } | null {
+  if (scale.scaleId !== 'ionian' || degree < 1 || degree > 7) return null;
+
+  const root = scale.notes[degree - 1];
+  const isDiminishedDegree = degree === 7;
+  const isMinorDegree = [2, 3, 6].includes(degree) || isDiminishedDegree;
+  const intervalLabels = isDiminishedDegree
+    ? ['1', 'b3', '4', 'b5', 'b7']
+    : isMinorDegree
+      ? ['1', 'b3', '4', '5', 'b7']
+      : ['1', '2', '3', '5', '6'];
+  const semitones = isDiminishedDegree
+    ? [0, 3, 5, 6, 10]
+    : isMinorDegree
+      ? [0, 3, 5, 7, 10]
+      : [0, 2, 4, 7, 9];
+
+  return {
+    notes: semitones.map((semitone) => normalizePitch(root + semitone)),
+    intervalLabels,
+    name: isDiminishedDegree || isMinorDegree ? 'Pentatónica menor' : 'Pentatónica mayor',
+  };
 }
 
 /** Devuelve todas las categorías presentes en la librería, en orden de aparición */

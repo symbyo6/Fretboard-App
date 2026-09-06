@@ -54,7 +54,7 @@ export const CHORD_QUALITY_SUFFIX: Record<ChordQuality, string> = {
   halfDiminished7: 'm7b5',
   diminished7: 'dim7',
   augmented7: 'aug7',
-  majorAugmented7: 'aug(maj7)',
+  majorAugmented7: 'maj7#5',
   dominant7Flat5: '7b5',
 };
 
@@ -108,6 +108,18 @@ export function toVoicing(chord: DiatonicChord, voicing: ChordVoicing): Diatonic
 
   const inversionMatch = voicing.match(/-(\d)$/);
   const inversion = inversionMatch ? Number(inversionMatch[1]) - 1 : 0;
+
+  if (voicing.startsWith('drop2') && chord.tones.length === 4) {
+    const drop2Orders = [
+      [0, 2, 3, 1],
+      [1, 3, 0, 2],
+      [2, 0, 1, 3],
+      [3, 1, 2, 0],
+    ];
+    const order = drop2Orders[inversion] ?? drop2Orders[0];
+    return { ...chord, tones: order.map((index) => chord.tones[index]) };
+  }
+
   const rotatedTones = [
     ...chord.tones.slice(inversion),
     ...chord.tones.slice(0, inversion),
@@ -195,7 +207,7 @@ const SEVENTH_SYMBOLS: Record<SeventhQuality, string> = {
   dim7: 'dim7',
   minMaj7: 'm(maj7)',
   aug7: 'aug7',
-  augMaj7: 'aug(maj7)',
+  augMaj7: 'maj7#5',
   dom7b5: '7♭5',
 };
 
@@ -210,6 +222,20 @@ const SEVENTH_SYMBOLS: Record<SeventhQuality, string> = {
 function stackThirds(scale: ResolvedScale, degreeIndex: number, count: 3 | 4): PitchClass[] {
   const len = scale.notes.length;
   const result: PitchClass[] = [];
+
+  if (scale.category === 'pentatonic') {
+    const triadLabels = new Set(['1', '3', 'b3', '5']);
+    const triadIndexes = scale.intervalLabels
+      .map((label, index) => (triadLabels.has(label) ? index : -1))
+      .filter((index) => index >= 0);
+
+    if (triadIndexes.length !== 3) {
+      throw new Error(`La escala pentatónica no contiene una tríada 1-3-5 o 1-b3-5 válida: ${scale.id}`);
+    }
+
+    return triadIndexes.slice(0, count).map((index) => scale.notes[(degreeIndex + index) % len]);
+  }
+
   // Para escalas pentatónicas, "cada grado" no siempre da tercera consistente,
   // así que avanzamos de 2 en 2 posiciones dentro del array de la escala (aprox. terceras)
   const step = len === 7 ? 2 : Math.round(len / 3.5) || 2;
@@ -315,9 +341,16 @@ export function buildDiatonicChord(
       normalizePitch(seventh! - root)
     )
     : undefined;
+  const effectiveSeventhQuality = extended && scale.id === 'melodic-minor'
+    ? degree1Indexed === 4 || degree1Indexed === 5
+      ? 'dom7'
+      : degree1Indexed === 6 || degree1Indexed === 7
+        ? 'm7b5'
+        : seventhQuality
+    : seventhQuality;
 
-  const qualitySymbol = extended && seventhQuality
-    ? SEVENTH_SYMBOLS[seventhQuality]
+  const qualitySymbol = extended && effectiveSeventhQuality
+    ? SEVENTH_SYMBOLS[effectiveSeventhQuality]
     : TRIAD_SYMBOLS[triadQuality];
 
   const rootName = getNoteName(root, notation);
@@ -331,21 +364,21 @@ export function buildDiatonicChord(
 
   const quality: ChordQuality = !extended
     ? triadQuality
-    : seventhQuality === 'maj7'
+    : effectiveSeventhQuality === 'maj7'
       ? 'major7'
-      : seventhQuality === 'min7'
+      : effectiveSeventhQuality === 'min7'
         ? 'minor7'
-        : seventhQuality === 'dom7'
+        : effectiveSeventhQuality === 'dom7'
           ? 'dominant7'
-          : seventhQuality === 'minMaj7'
+          : effectiveSeventhQuality === 'minMaj7'
             ? 'minorMajor7'
-            : seventhQuality === 'm7b5'
+            : effectiveSeventhQuality === 'm7b5'
               ? 'halfDiminished7'
-              : seventhQuality === 'dim7'
+              : effectiveSeventhQuality === 'dim7'
                 ? 'diminished7'
-                : seventhQuality === 'aug7'
+                : effectiveSeventhQuality === 'aug7'
                   ? 'augmented7'
-                  : seventhQuality === 'augMaj7'
+                  : effectiveSeventhQuality === 'augMaj7'
                     ? 'majorAugmented7'
                     : 'dominant7Flat5';
 
@@ -371,7 +404,7 @@ export function getAllDiatonicChords(
   notation: NotationPreference = 'sharps',
   degreeNotation: DegreeNotation = 'roman'
 ): DiatonicChord[] {
-  const degreeCount = scale.notes.length;
+  const degreeCount = scale.category === 'pentatonic' ? 1 : scale.notes.length;
   const chords: DiatonicChord[] = [];
   for (let degree = 1; degree <= degreeCount; degree++) {
     chords.push(buildDiatonicChord(scale, degree, extended, notation, degreeNotation));

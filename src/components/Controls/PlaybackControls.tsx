@@ -1,13 +1,11 @@
 // src/components/Controls/PlaybackControls.tsx
 
 import React, { useState } from 'react';
-import { useAudioEngine } from '../../hooks/useAudioEngine';
 import {
   useProgression,
   type ProgressionStep,
   type PlaybackMode,
 } from '../../hooks/useProgression';
-import { AudioUnlockBanner } from './AudioUnlockBanner';
 
 interface PlaybackControlsProps {
   steps: ProgressionStep[];
@@ -16,14 +14,9 @@ interface PlaybackControlsProps {
   lowerString: number;
   upperString: number;
   onStringRangeChange: (lowerString: number, upperString: number) => void;
+  extendedChords: boolean;
   label?: string;
 }
-
-const MODE_OPTIONS: { id: PlaybackMode; label: string; symbol: string }[] = [
-  { id: 'chord', label: 'Bloque', symbol: '' },
-  { id: 'arpeggio-up', label: 'Arpegio arriba', symbol: '↑' },
-  { id: 'arpeggio-down', label: 'Arpegio abajo', symbol: '↓' },
-];
 
 /** Barra de reproducción para progresiones, escalas y voicings. */
 export function PlaybackControls({
@@ -33,9 +26,9 @@ export function PlaybackControls({
   lowerString,
   upperString,
   onStringRangeChange,
+  extendedChords,
   label = 'Progresión',
 }: PlaybackControlsProps): JSX.Element {
-  const { isUnlocked, unlock } = useAudioEngine();
   const [bpm, setBpm] = useState(90);
   const [mode, setMode] = useState<PlaybackMode>('arpeggio-up');
 
@@ -47,11 +40,17 @@ export function PlaybackControls({
   });
 
   const hasSteps = steps.length > 0;
+  const stringGroupSize = extendedChords ? 4 : 3;
+  const stringGroups = Array.from(
+    { length: 6 - stringGroupSize + 1 },
+    (_, index) => ({
+      lower: 6 - index,
+      upper: 6 - index - stringGroupSize + 1,
+    })
+  );
 
   return (
     <div style={panelStyle}>
-      <AudioUnlockBanner isUnlocked={isUnlocked} onUnlock={unlock} />
-
       <div style={titleStyle}>
         {label} {hasSteps && `(${steps.length} pasos)`}
       </div>
@@ -77,35 +76,31 @@ export function PlaybackControls({
           {isPlaying ? 'Detener' : 'Reproducir'}
         </button>
 
-        <div role="radiogroup" style={modeGroupStyle}>
-          {MODE_OPTIONS.map((option) => {
-            const isSelected = mode === option.id;
-
-            return (
-              <button
-                key={option.id}
-                type="button"
-                role="radio"
-                aria-checked={isSelected}
-                onClick={() => setMode(option.id)}
-                disabled={isPlaying}
-                style={{
-                  minHeight: 44,
-                  padding: '0 0.6rem',
-                  borderRadius: '0.5rem',
-                  border: isSelected ? '2px solid #6366f1' : '1px solid #d6d3d1',
-                  background: isSelected ? '#6366f1' : 'white',
-                  color: isSelected ? 'white' : '#292524',
-                  fontWeight: isSelected ? 700 : 500,
-                  fontSize: '0.78rem',
-                  cursor: isPlaying ? 'not-allowed' : 'pointer',
-                  opacity: isPlaying ? 0.6 : 1,
-                }}
-              >
-                {option.symbol} {option.label}
-              </button>
-            );
-          })}
+        <div role="group" aria-label="Modo y dirección de reproducción" style={modeGroupStyle}>
+          <button
+            type="button"
+            onClick={() => setMode('chord')}
+            disabled={isPlaying}
+            style={getModeButtonStyle(mode === 'chord', isPlaying)}
+          >
+            Bloque
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode((currentMode) => (
+              currentMode === 'arpeggio-up' ? 'arpeggio-down' : 'arpeggio-up'
+            ))}
+            disabled={isPlaying}
+            aria-label={mode === 'arpeggio-up'
+              ? 'Cambiar a arpegio descendente'
+              : 'Cambiar a arpegio ascendente'}
+            title={mode === 'arpeggio-up'
+              ? 'Cambiar a arpegio descendente'
+              : 'Cambiar a arpegio ascendente'}
+            style={getModeButtonStyle(mode !== 'chord', isPlaying)}
+          >
+            {mode === 'arpeggio-up' ? '↑ Ascendente' : '↓ Descendente'}
+          </button>
         </div>
       </div>
 
@@ -116,7 +111,7 @@ export function PlaybackControls({
         <input
           id="bpm-slider"
           type="range"
-          min={40}
+          min={10}
           max={200}
           step={2}
           value={bpm}
@@ -126,39 +121,31 @@ export function PlaybackControls({
         />
       </div>
 
-      <div style={tempoRowStyle}>
-        <label htmlFor="lower-string" style={tempoLabelStyle}>
-          Inferior
-          <select
-            id="lower-string"
-            value={lowerString}
-            onChange={(event) => onStringRangeChange(Number(event.target.value), upperString)}
-            disabled={isPlaying}
-            style={selectStyle}
-          >
-            {[6, 5, 4, 3, 2, 1].map((stringNumber) => (
-              <option key={stringNumber} value={stringNumber} disabled={stringNumber < upperString}>
-                Cuerda {stringNumber}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label htmlFor="upper-string" style={tempoLabelStyle}>
-          Superior
-          <select
-            id="upper-string"
-            value={upperString}
-            onChange={(event) => onStringRangeChange(lowerString, Number(event.target.value))}
-            disabled={isPlaying}
-            style={selectStyle}
-          >
-            {[1, 2, 3, 4, 5, 6].map((stringNumber) => (
-              <option key={stringNumber} value={stringNumber} disabled={stringNumber > lowerString}>
-                Cuerda {stringNumber}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div style={stringGroupsRowStyle} aria-label={`Grupos de ${stringGroupSize} cuerdas`}>
+        <span style={tempoLabelStyle}>Grupos</span>
+        {stringGroups.map((group) => {
+          const isSelected = lowerString === group.lower && upperString === group.upper;
+
+          return (
+            <button
+              key={`${group.lower}-${group.upper}`}
+              type="button"
+              onClick={() => onStringRangeChange(group.lower, group.upper)}
+              disabled={isPlaying}
+              aria-pressed={isSelected}
+              title={`${stringGroupSize} cuerdas: ${group.lower} a ${group.upper}`}
+              style={{
+                ...stringGroupButtonStyle,
+                background: isSelected ? '#0f766e' : 'white',
+                color: isSelected ? 'white' : '#292524',
+                borderColor: isSelected ? '#0f766e' : '#d6d3d1',
+                opacity: isPlaying ? 0.6 : 1,
+              }}
+            >
+              {group.lower}-{group.upper}
+            </button>
+          );
+        })}
       </div>
 
       {hasSteps && (
@@ -222,6 +209,19 @@ const modeGroupStyle: React.CSSProperties = {
   gap: '0.35rem',
 };
 
+const getModeButtonStyle = (isSelected: boolean, isPlaying: boolean): React.CSSProperties => ({
+  minHeight: 44,
+  padding: '0 0.6rem',
+  borderRadius: '0.5rem',
+  border: isSelected ? '2px solid #6366f1' : '1px solid #d6d3d1',
+  background: isSelected ? '#6366f1' : 'white',
+  color: isSelected ? 'white' : '#292524',
+  fontWeight: isSelected ? 700 : 500,
+  fontSize: '0.78rem',
+  cursor: isPlaying ? 'not-allowed' : 'pointer',
+  opacity: isPlaying ? 0.6 : 1,
+});
+
 const tempoRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
@@ -235,19 +235,28 @@ const tempoLabelStyle: React.CSSProperties = {
   flexShrink: 0,
 };
 
-const selectStyle: React.CSSProperties = {
-  minHeight: 40,
-  marginLeft: '0.35rem',
-  padding: '0 0.4rem',
-  border: '1px solid #d6d3d1',
-  borderRadius: '0.4rem',
-  background: 'white',
-  color: '#292524',
-};
-
 const stepsStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.3rem',
   overflowX: 'auto',
   paddingBottom: '0.2rem',
+};
+
+const stringGroupsRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: '0.35rem',
+  marginBottom: '0.6rem',
+};
+
+const stringGroupButtonStyle: React.CSSProperties = {
+  minWidth: 42,
+  minHeight: 38,
+  padding: '0 0.45rem',
+  border: '1px solid',
+  borderRadius: '0.4rem',
+  fontSize: '0.78rem',
+  fontWeight: 700,
+  cursor: 'pointer',
 };

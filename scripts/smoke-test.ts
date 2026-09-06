@@ -13,7 +13,7 @@ import { buildOverlayRings } from '../src/lib/theory/overlayRings';
 import { getPrimaryCagedShapes } from '../src/lib/theory/caged';
 import { getPrimaryNpsShapes } from '../src/lib/theory/npsShapes';
 import { findBestOverlapPair } from '../src/lib/shapes/shapeComparison';
-import { getNoteName, resolveScale } from '../src/lib/theory/scales';
+import { getMajorDegreePentatonic, getNoteName, resolveScale } from '../src/lib/theory/scales';
 import { fretToNoteName } from '../src/lib/audio/tuning';
 
 interface TestResult {
@@ -81,6 +81,40 @@ test('C Ionian has seven diatonic triads', () => {
   assertEqual(chords[0].symbol, 'C', 'I chord symbol');
 });
 
+test('Major scale degrees expose major, minor, and b5 pentatonics', () => {
+  const scale = resolveScale('ionian', 'C');
+  assertEqual(
+    getMajorDegreePentatonic(scale, 1)?.intervalLabels,
+    ['1', '2', '3', '5', '6'],
+    'I major pentatonic'
+  );
+  assertEqual(
+    getMajorDegreePentatonic(scale, 2)?.intervalLabels,
+    ['1', 'b3', '4', '5', 'b7'],
+    'ii minor pentatonic'
+  );
+  assertEqual(
+    getMajorDegreePentatonic(scale, 7)?.intervalLabels,
+    ['1', 'b3', '4', 'b5', 'b7'],
+    'vii diminished pentatonic'
+  );
+  assertEqual(
+    getMajorDegreePentatonic(scale, 7)?.notes.map((pitch) => getNoteName(pitch)),
+    ['B', 'D', 'E', 'F', 'A'],
+    'B diminished pentatonic notes'
+  );
+});
+
+test('Pentatonic scales expose their contained 1-3-5 triad', () => {
+  const majorPentatonic = getAllDiatonicChords(resolveScale('major-pentatonic', 'C'), false);
+  const minorPentatonic = getAllDiatonicChords(resolveScale('minor-pentatonic', 'A'), false);
+
+  assertEqual(majorPentatonic.length, 1, 'Major pentatonic chord count');
+  assertEqual(majorPentatonic[0].tones.map((tone) => tone.noteName), ['C', 'E', 'G'], 'Major pentatonic 1-3-5 triad');
+  assertEqual(minorPentatonic.length, 1, 'Minor pentatonic chord count');
+  assertEqual(minorPentatonic[0].tones.map((tone) => tone.noteName), ['A', 'C', 'E'], 'Minor pentatonic 1-b3-5 triad');
+});
+
 test('Drop 2 reorders triads and seventh chords without changing their tones', () => {
   const scale = resolveScale('ionian', 'C');
   const triad = buildDiatonicChord(scale, 1, false);
@@ -93,8 +127,8 @@ test('Drop 2 reorders triads and seventh chords without changing their tones', (
   );
   assertEqual(
     toVoicing(seventh, 'drop2-1').tones.map((tone) => tone.role),
-    ['fifth', 'root', 'third', 'seventh'],
-    'Drop 2 seventh order'
+    ['root', 'fifth', 'seventh', 'third'],
+    'Drop 2 position 1 order'
   );
   assertEqual(
     new Set(toVoicing(seventh, 'drop2-1').tones.map((tone) => tone.pitch)),
@@ -103,8 +137,18 @@ test('Drop 2 reorders triads and seventh chords without changing their tones', (
   );
   assertEqual(
     toVoicing(seventh, 'drop2-2').tones.map((tone) => tone.role),
+    ['third', 'seventh', 'root', 'fifth'],
+    'Drop 2 position 2 order'
+  );
+  assertEqual(
+    toVoicing(seventh, 'drop2-3').tones.map((tone) => tone.role),
+    ['fifth', 'root', 'third', 'seventh'],
+    'Drop 2 position 3 order'
+  );
+  assertEqual(
+    toVoicing(seventh, 'drop2-4').tones.map((tone) => tone.role),
     ['seventh', 'third', 'fifth', 'root'],
-    'Drop 2 first inversion order'
+    'Drop 2 position 4 order'
   );
   assertEqual(
     toVoicing(seventh, 'drop3-1').tones.map((tone) => tone.role),
@@ -117,7 +161,10 @@ test('A melodic minor identifies characteristic seventh chords', () => {
   const scale = resolveScale('melodic-minor', 'A');
   assertEqual(buildDiatonicChord(scale, 1, true).quality, 'minorMajor7', 'I seventh chord');
   assertEqual(buildDiatonicChord(scale, 3, true).quality, 'majorAugmented7', 'III seventh chord');
-  assertEqual(buildDiatonicChord(scale, 7, true).quality, 'halfDiminished7', 'VII seventh chord');
+  assertEqual(buildDiatonicChord(scale, 4, true).quality, 'dominant7', 'IV seventh chord convention');
+  assertEqual(buildDiatonicChord(scale, 5, true).quality, 'dominant7', 'V seventh chord convention');
+  assertEqual(buildDiatonicChord(scale, 6, true).quality, 'halfDiminished7', 'VI seventh chord convention');
+  assertEqual(buildDiatonicChord(scale, 7, true).quality, 'halfDiminished7', 'VII seventh chord convention');
 });
 
 test('Minor variants diverge only on degrees VI and VII', () => {

@@ -17,9 +17,13 @@ class AudioEngine {
 
   /** Desbloquea el AudioContext y construye el grafo de síntesis. */
   async unlock(): Promise<void> {
-    if (this.isUnlockedFlag) return;
+    const context = Tone.getContext();
+    if (this.isUnlockedFlag && context.state === 'running') return;
 
     await Tone.start();
+    if (context.state !== 'running') {
+      await context.resume();
+    }
     this.ensureSynthGraph();
     this.isUnlockedFlag = true;
   }

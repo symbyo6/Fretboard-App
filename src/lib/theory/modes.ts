@@ -43,7 +43,7 @@ export const MODE_LIBRARY: Record<ModeId, ModeDefinition> = {
   },
   dorian: {
     id: 'dorian',
-    name: 'Dórico',
+    name: 'Dorio',
     intervals: [0, 2, 3, 5, 7, 9, 10],
     characteristicDegree: 6,
     characteristicLabel: '6ª mayor sobre tríada menor',

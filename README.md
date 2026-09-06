@@ -1,4 +1,4 @@
-# Fretboard Theory Explorer
+# Localizador de teoría del diapasón de la guitarra
 
 Interactive guitar fretboard explorer with scale degrees, chord tones, harmonic major, chord voicings, fretboard highlighting, and Tone.js playback.
 

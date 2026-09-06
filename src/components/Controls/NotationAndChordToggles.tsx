@@ -134,18 +134,22 @@ export function NotationAndChordToggles({
         Tétradas (7)
       </label>
 
-      <div role="radiogroup" aria-label="Tipo de voicing" style={voicingTypeGroupStyle}>
+      <div role="radiogroup" aria-label="Tipo de inversiones" style={voicingTypeGroupStyle}>
+        <span style={voicingTypeLabelStyle}>Tipo de inversiones</span>
         {(['closed', 'drop2', 'drop3'] as ChordVoicingType[]).map((type) => (
           <button
             key={type}
             type="button"
             role="radio"
             aria-checked={voicingType === type}
+            disabled={type !== 'closed' && !extendedChords}
             onClick={() => handleVoicingTypeChange(type)}
             style={{
               ...voicingTypeButtonStyle,
               background: voicingType === type ? '#0f766e' : 'white',
               color: voicingType === type ? 'white' : '#292524',
+              cursor: type !== 'closed' && !extendedChords ? 'not-allowed' : 'pointer',
+              opacity: type !== 'closed' && !extendedChords ? 0.5 : 1,
             }}
           >
             {type === 'closed' ? 'Cerrado' : type === 'drop2' ? 'Drop 2' : 'Drop 3'}
@@ -153,22 +157,65 @@ export function NotationAndChordToggles({
         ))}
       </div>
 
-      {voicingType !== 'closed' && (
-        <label style={voicingLabelStyle}>
-          Posición
-          <select
-            aria-label={`Posición ${voicingType}`}
-            value={voicingNumber}
-            onChange={(event) => onVoicingChange(`${voicingType}-${event.target.value}` as ChordVoicing)}
-            style={voicingSelectStyle}
-          >
-            <option value={1}>1 (no inversión)</option>
-            <option value={2}>2 (1a inversión)</option>
-            <option value={3}>3 (2a inversión)</option>
-            <option value={4}>4 (3a inversión)</option>
-          </select>
-        </label>
-      )}
+      <div
+        role={voicingType === 'closed' ? undefined : 'radiogroup'}
+        aria-label={voicingType === 'closed' ? undefined : `Inversiones ${voicingType}`}
+        style={voicingPositionsStyle}
+      >
+        <span style={voicingLabelStyle}>Inversiones</span>
+        {voicingType === 'closed' ? (
+          <span style={closedVoicingHintStyle}>Cerrado no tiene inversiones</span>
+        ) : (
+          <>
+            <button
+              type="button"
+              aria-label="Subir a la próxima inversión"
+              title="Próxima inversión"
+              onClick={() => {
+                const nextPosition = (voicingNumber % 4) + 1;
+                onVoicingChange(`${voicingType}-${nextPosition}` as ChordVoicing);
+              }}
+              style={voicingStepButtonStyle}
+            >
+              ↑
+            </button>
+            {[1, 2, 3, 4].map((position) => {
+              const isSelected = voicingNumber === position;
+
+              return (
+                <button
+                  key={position}
+                  type="button"
+                  role="radio"
+                  aria-checked={isSelected}
+                  aria-label={`${voicingType} posición ${position}`}
+                  onClick={() => onVoicingChange(`${voicingType}-${position}` as ChordVoicing)}
+                  style={{
+                    ...voicingPositionButtonStyle,
+                    background: isSelected ? '#0f766e' : 'white',
+                    color: isSelected ? 'white' : '#292524',
+                    borderColor: isSelected ? '#0f766e' : '#d6d3d1',
+                  }}
+                >
+                  {position}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              aria-label="Bajar a la inversión anterior"
+              title="Inversión anterior"
+              onClick={() => {
+                const previousPosition = ((voicingNumber + 2) % 4) + 1;
+                onVoicingChange(`${voicingType}-${previousPosition}` as ChordVoicing);
+              }}
+              style={voicingStepButtonStyle}
+            >
+              ↓
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -183,20 +230,53 @@ const voicingLabelStyle: React.CSSProperties = {
   color: '#57534e',
 };
 
-const voicingSelectStyle: React.CSSProperties = {
-  minHeight: 40,
-  padding: '0 0.4rem',
+const voicingPositionsStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.3rem',
+};
+
+const voicingPositionButtonStyle: React.CSSProperties = {
+  minWidth: 38,
+  minHeight: 38,
+  border: '1px solid',
+  borderRadius: '0.4rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const voicingStepButtonStyle: React.CSSProperties = {
+  minWidth: 38,
+  minHeight: 38,
   border: '1px solid #d6d3d1',
   borderRadius: '0.4rem',
   background: 'white',
   color: '#292524',
+  fontSize: '1.1rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const closedVoicingHintStyle: React.CSSProperties = {
+  color: '#78716c',
+  fontSize: '0.78rem',
+  fontStyle: 'italic',
 };
 
 const voicingTypeGroupStyle: React.CSSProperties = {
   display: 'inline-flex',
+  alignItems: 'center',
   border: '1px solid #d6d3d1',
   borderRadius: '0.5rem',
   overflow: 'hidden',
+};
+
+const voicingTypeLabelStyle: React.CSSProperties = {
+  padding: '0 0.6rem',
+  color: '#57534e',
+  fontSize: '0.8rem',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
 };
 
 const voicingTypeButtonStyle: React.CSSProperties = {

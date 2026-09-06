@@ -59,19 +59,19 @@ const HARMONIC_MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 11];
 const MELODIC_MINOR_INTERVALS = [0, 2, 3, 5, 7, 9, 11];
 
 const MAJOR_MODE_NAMES = [
-  'Ionian (1ª — Mayor)',
+  'Jonio (1ª — Mayor)',
   'Dorian (2º)',
   'Phrygian (3º)',
   'Lydian (4º)',
   'Mixolydian (5º)',
-  'Aeolian (6º — menor natural)',
+  'Eoleo (6º — menor natural)',
   'Locrian (7º)',
 ];
 
 const HARMONIC_MINOR_MODE_NAMES = [
   'Menor armónica (1ª)',
   'Locrian #6 (2º)',
-  'Ionian #5 (3º)',
+  'Jonio #5 (3º)',
   'Dorian #4 (4º)',
   'Phrygian dominante (5º)',
   'Lydian #2 (6º)',
