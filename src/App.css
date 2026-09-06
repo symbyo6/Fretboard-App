@@ -1,0 +1,135 @@
+:root {
+  color: #1c1917;
+  background: #e7e5e4;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button {
+  font: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 2rem 1rem;
+  background-color: #e7e5e4;
+  background-image: linear-gradient(90deg, rgba(120, 113, 108, 0.08) 1px, transparent 1px), linear-gradient(rgba(120, 113, 108, 0.08) 1px, transparent 1px);
+  background-size: 1.5rem 1.5rem;
+}
+
+.phase-one {
+  width: 100%;
+  min-height: calc(100vh - 4rem);
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 2.5rem);
+  border: 1px solid #a8a29e;
+  border-radius: 8px;
+  background: #fffbeb;
+  box-shadow: 6px 6px 0 #57534e;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: #b45309;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(2rem, 7vw, 3.5rem);
+  letter-spacing: 0;
+}
+
+h2 {
+  margin-top: 1.75rem;
+  font-size: 1.15rem;
+}
+
+.current-state,
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1.25rem;
+}
+
+.current-state span {
+  padding: 0.4rem 0.65rem;
+  border: 1px solid #d6d3d1;
+  background: #fff;
+  font-size: 0.9rem;
+}
+
+.actions button {
+  min-height: 44px;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid #0f766e;
+  border-radius: 5px;
+  background: #0f766e;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.actions button.secondary {
+  border-color: #b45309;
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.chord-list {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chord-list li {
+  display: grid;
+  grid-template-columns: 3rem minmax(5rem, 1fr) 2fr;
+  gap: 0.6rem;
+  align-items: center;
+  padding: 0.65rem;
+  border-bottom: 1px solid #d6d3d1;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.chord-list li > strong {
+  color: #b45309;
+}
+
+.chord-list small {
+  color: #57534e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (max-width: 460px) {
+  .app-shell {
+    padding: 1rem 0.75rem;
+  }
+
+  .chord-list li {
+    grid-template-columns: 2.5rem 1fr;
+  }
+
+  .chord-list small {
+    grid-column: 2;
+  }
+}

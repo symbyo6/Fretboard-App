@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fretboard Theory Explorer</title>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b1220; }
+  .app { font-family: system-ui, -apple-system, sans-serif; color: #f9fafb;
+         padding: 16px; max-width: 920px; margin: 0 auto; }
+  h1 { font-size: 20px; text-align: center; margin: 8px 0 16px; }
+  .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px;
+              background: #1f2937; padding: 14px; border-radius: 12px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  label { font-size: 13px; color: #9ca3af; }
+  select { min-height: 40px; padding: 6px 10px; border-radius: 8px;
+           border: 1px solid #374151; background: #111827; color: white; font-size: 14px; }
+  .degrees { gap: 6px; }
+  .deg { min-width: 44px; min-height: 44px; border-radius: 8px; border: 1px solid #374151;
+         background: #111827; color: white; font-weight: bold; cursor: pointer; font-size: 15px; }
+  .deg.active { background: #3b82f6; border-color: #3b82f6; }
+  .chordInfo { font-size: 17px; background: #111827; padding: 8px 12px;
+               border-radius: 8px; width: 100%; }
+  .buttons button { min-height: 44px; padding: 0 18px; border-radius: 8px; border: none;
+                     background: #22c55e; color: #052e14; font-weight: bold; cursor: pointer;
+                     font-size: 14px; }
+  .buttons button:active { transform: scale(0.97); }
+  .buttons button.secondary { background: #a855f7; color: #2e0e3f; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 13px;
+            background: #1f2937; padding: 10px 14px; border-radius: 12px; }
+  .legend .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+  .legend .dot.faded { background: rgba(255,255,255,0.3); }
+  svg { display: block; width: 100%; height: auto; }
+  input[type=checkbox] { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script>
+const e = React.createElement;
+const { useState, useMemo, useRef, useEffect } = React;
+
+// ---------- THEORY ENGINE ----------
+const NOTES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+
+const SCALE_LIBRARY = {
+  major:        { name: 'Major (Ionian)',      intervals: [0,2,4,5,7,9,11] },
+  naturalMinor: { name: 'Natural Minor',       intervals: [0,2,3,5,7,8,10] },
+  dorian:       { name: 'Dorian',              intervals: [0,2,3,5,7,9,10] },
+  phrygian:     { name: 'Phrygian',            intervals: [0,1,3,5,7,8,10] },
+  lydian:       { name: 'Lydian',              intervals: [0,2,4,6,7,9,11] },
+  mixolydian:   { name: 'Mixolydian',          intervals: [0,2,4,5,7,9,10] },
+  locrian:      { name: 'Locrian',             intervals: [0,1,3,5,6,8,10] },
+  harmonicMinor:{ name: 'Harmonic Minor',      intervals: [0,2,3,5,7,8,11] },
+};
+
+function getScaleNotes(key, scaleId) {
+  const root = NOTES.indexOf(key);
+  const intervals = SCALE_LIBRARY[scaleId].intervals;
+  return intervals.map((iv, i) => ({ note: NOTES[(root + iv) % 12], degree: i + 1 }));
+}
+
+function buildDiatonicChord(scaleNotes, degreeIdx, extended) {
+  const len = scaleNotes.length;
+  const offsets = extended ? [0,2,4,6] : [0,2,4];
+  const roles = ['root','third','fifth','seventh'];
+  return offsets.map((off, i) => ({
+    note: scaleNotes[(degreeIdx + off) % len].note,
+    role: roles[i],
+  }));
+}
+
+function getChordQuality(pitchClasses) {
+  const [root, third, fifth] = pitchClasses;
+  const t = (third - root + 12) % 12;
+  const f = (fifth - root + 12) % 12;
+  if (t === 4 && f === 7) return 'maj';
+  if (t === 3 && f === 7) return 'min';
+  if (t === 3 && f === 6) return 'dim';
+  if (t === 4 && f === 8) return 'aug';
+  return '?';
+}
+
+function getRomanNumeral(degreeIdx, quality) {
+  const base = ['I','II','III','IV','V','VI','VII'][degreeIdx];
+  if (quality === 'maj') return base;
+  if (quality === 'aug') return base + '+';
+  if (quality === 'min') return base.toLowerCase();
+  if (quality === 'dim') return base.toLowerCase() + '°';
+  return base + '?';
+}
+
+// ---------- FRETBOARD ----------
+const ROLE_COLOR = { root: '#ef4444', third: '#3b82f6', fifth: '#22c55e', seventh: '#a855f7' };
+const STRINGS = ['E','B','G','D','A','E'];
+const BASE_OCT = [4,3,3,3,2,2];
+const FRET_COUNT = 12;
+
+function Fretboard({ scaleNotes, chordNotes, onPlayNote }) {
+  const cellW = 54, cellH = 40, padL = 40, padT = 30;
+  const width = padL + FRET_COUNT * cellW + 20;
+  const height = padT + STRINGS.length * cellH + 20;
+  const els = [];
+
+  for (let f = 0; f <= FRET_COUNT; f++) {
+    const x = padL + f * cellW;
+    els.push(e('line', { key:'fret-'+f, x1:x, y1:padT, x2:x, y2:padT+(STRINGS.length-1)*cellH,
+      stroke: f===0 ? '#e5e7eb' : '#4b5563', strokeWidth: f===0 ? 4 : 1.5 }));
+  }
+  for (let s = 0; s < STRINGS.length; s++) {
+    const y = padT + s * cellH;
+    els.push(e('line', { key:'str-'+s, x1:padL, y1:y, x2:padL+FRET_COUNT*cellW, y2:y,
+      stroke:'#9ca3af', strokeWidth: 1 + (STRINGS.length-1-s)*0.3 }));
+  }
+  [3,5,7,9].forEach(f => {
+    els.push(e('circle', { key:'mk-'+f, cx: padL+(f-0.5)*cellW, cy: padT+((STRINGS.length-1)/2)*cellH, r:4, fill:'#374151' }));
+  });
+  els.push(e('circle', { key:'mk12a', cx: padL+11.5*cellW, cy: padT+1*cellH, r:4, fill:'#374151' }));
+  els.push(e('circle', { key:'mk12b', cx: padL+11.5*cellW, cy: padT+3*cellH, r:4, fill:'#374151' }));
+
+  for (let f = 1; f <= FRET_COUNT; f++) {
+    els.push(e('text', { key:'lbl-'+f, x: padL+(f-0.5)*cellW, y: padT-10, fill:'#9ca3af', fontSize:12, textAnchor:'middle' }, f));
+  }
+
+  for (let s = 0; s < STRINGS.length; s++) {
+    const openIdx = NOTES.indexOf(STRINGS[s]);
+    for (let f = 0; f <= FRET_COUNT; f++) {
+      const total = openIdx + f;
+      const noteName = NOTES[total % 12];
+      const octave = BASE_OCT[s] + Math.floor(total / 12);
+      const cx = f === 0 ? padL + 16 : padL + (f - 0.5) * cellW;
+      const cy = padT + s * cellH;
+      const chordMatch = chordNotes.find(n => n.note === noteName);
+      const scaleMatch = scaleNotes.find(n => n.note === noteName);
+      const key = `n-${s}-${f}`;
+
+      if (chordMatch) {
+        els.push(e('g', { key, onClick:()=>onPlayNote(noteName,octave), style:{cursor:'pointer'} },
+          e('circle', { cx, cy, r:15, fill: ROLE_COLOR[chordMatch.role]||'#eab308', stroke:'white', strokeWidth:2 }),
+          e('text', { x:cx, y:cy+4, fill:'white', fontSize:12, fontWeight:'bold', textAnchor:'middle' }, noteName)
+        ));
+      } else if (scaleMatch) {
+        els.push(e('g', { key, onClick:()=>onPlayNote(noteName,octave), style:{cursor:'pointer'} },
+          e('circle', { cx, cy, r:10, fill:'rgba(255,255,255,0.12)', stroke:'rgba(255,255,255,0.4)', strokeWidth:1 }),
+          e('text', { x:cx, y:cy+3, fill:'#d1d5db', fontSize:9, textAnchor:'middle' }, noteName)
+        ));
+      } else {
+        els.push(e('circle', { key, cx, cy, r:15, fill:'transparent', onClick:()=>onPlayNote(noteName,octave), style:{cursor:'pointer'} }));
+      }
+    }
+  }
+  for (let s = 0; s < STRINGS.length; s++) {
+    els.push(e('text', { key:'sl-'+s, x:10, y: padT+s*cellH+4, fill:'#f9fafb', fontSize:12, fontWeight:'bold' }, STRINGS[s]));
+  }
+
+  return e('svg', { viewBox:`0 0 ${width} ${height}`, style:{ background:'#111827', borderRadius:12 } }, els);
+}
+
+// ---------- CONTROLS ----------
+function Controls(p) {
+  return e('div', { className:'controls' },
+    e('div', { className:'row' },
+      e('label', null, 'Tonalidad'),
+      e('select', { value:p.selectedKey, onChange:ev=>p.setSelectedKey(ev.target.value) },
+        NOTES.map(n => e('option', { key:n, value:n }, n)))
+    ),
+    e('div', { className:'row' },
+      e('label', null, 'Escala'),
+      e('select', { value:p.scaleId, onChange:ev=>p.setScaleId(ev.target.value) },
+        Object.entries(SCALE_LIBRARY).map(([id,s]) => e('option', { key:id, value:id }, s.name)))
+    ),
+    e('div', { className:'row degrees' },
+      [1,2,3,4,5,6,7].map(d => e('button', {
+        key:d, className: d===p.degree ? 'deg active' : 'deg', onClick:()=>p.setDegree(d)
+      }, d))
+    ),
+    e('div', { className:'row' },
+      e('label', null,
+        e('input', { type:'checkbox', checked:p.extended, onChange:ev=>p.setExtended(ev.target.checked) }),
+        ' Extendido (7ma)'
+      )
+    ),
+    e('div', { className:'chordInfo' },
+      e('strong', null, `${p.roman} → ${p.chordNotes.map(n=>n.note).join(' - ')}`)
+    ),
+    e('div', { className:'row buttons' },
+      e('button', { onClick:p.onPlayScale }, 'Tocar Escala'),
+      e('button', { className:'secondary', onClick:p.onPlayChord }, 'Tocar Acorde')
+    )
+  );
+}
+
+function Legend() {
+  return e('div', { className:'legend' },
+    e('span', null, e('span',{className:'dot',style:{background:ROLE_COLOR.root}}), 'Root'),
+    e('span', null, e('span',{className:'dot',style:{background:ROLE_COLOR.third}}), '3ra'),
+    e('span', null, e('span',{className:'dot',style:{background:ROLE_COLOR.fifth}}), '5ta'),
+    e('span', null, e('span',{className:'dot',style:{background:ROLE_COLOR.seventh}}), '7ma'),
+    e('span', null, e('span',{className:'dot faded'}), 'Tono de escala (fuera del acorde)')
+  );
+}
+
+// ---------- APP ----------
+function App() {
+  const [selectedKey, setSelectedKey] = useState('C');
+  const [scaleId, setScaleId] = useState('major');
+  const [degree, setDegree] = useState(1);
+  const [extended, setExtended] = useState(false);
+  const synthRef = useRef(null);
+
+  useEffect(() => { synthRef.current = new Tone.PolySynth(Tone.Synth).toDestination(); }, []);
+
+  const scaleNotes = useMemo(() => getScaleNotes(selectedKey, scaleId), [selectedKey, scaleId]);
+  const chordNotes = useMemo(() => buildDiatonicChord(scaleNotes, degree - 1, extended), [scaleNotes, degree, extended]);
+  const quality = useMemo(() => getChordQuality(chordNotes.map(n => NOTES.indexOf(n.note))), [chordNotes]);
+  const roman = getRomanNumeral(degree - 1, quality);
+
+  const playNote = async (note, octave) => {
+    await Tone.start();
+    synthRef.current.triggerAttackRelease(note + octave, '8n');
+  };
+  const playScale = async () => {
+    await Tone.start();
+    const now = Tone.now();
+    scaleNotes.forEach((n, i) => synthRef.current.triggerAttackRelease(n.note + '4', '8n', now + i * 0.3));
+  };
+  const playChord = async () => {
+    await Tone.start();
+    const now = Tone.now();
+    chordNotes.forEach(n => synthRef.current.triggerAttackRelease(n.note + '4', '2n', now));
+  };
+
+  return e('div', { className:'app' },
+    e('h1', null, 'Fretboard Theory Explorer'),
+    e(Controls, {
+      selectedKey, setSelectedKey, scaleId, setScaleId, degree, setDegree,
+      extended, setExtended, roman, quality, chordNotes,
+      onPlayScale: playScale, onPlayChord: playChord,
+    }),
+    e(Fretboard, { scaleNotes, chordNotes, onPlayNote: playNote }),
+    e(Legend)
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+</script>
+</body>
+</html>
