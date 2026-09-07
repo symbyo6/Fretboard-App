@@ -27,7 +27,7 @@ export const MODE_LIBRARY: Record<ModeId, ModeDefinition> = {
   },
   ionian: {
     id: 'ionian',
-    name: 'Jónico (Mayor)',
+    name: 'Jonio (Mayor)',
     intervals: [0, 2, 4, 5, 7, 9, 11],
     characteristicDegree: 7,
     characteristicLabel: '7ª mayor',
@@ -38,7 +38,7 @@ export const MODE_LIBRARY: Record<ModeId, ModeDefinition> = {
     name: 'Mixolidio',
     intervals: [0, 2, 4, 5, 7, 9, 10],
     characteristicDegree: 7,
-    characteristicLabel: '♭7 (dominante)',
+    characteristicLabel: 'b7 (dominante)',
     brightness: 0,
   },
   dorian: {
@@ -51,10 +51,10 @@ export const MODE_LIBRARY: Record<ModeId, ModeDefinition> = {
   },
   aeolian: {
     id: 'aeolian',
-    name: 'Eólico (Menor Nat.)',
+    name: 'Eoleo (Menor Nat.)',
     intervals: [0, 2, 3, 5, 7, 8, 10],
     characteristicDegree: 6,
-    characteristicLabel: '♭6',
+    characteristicLabel: 'b6',
     brightness: -2,
   },
   phrygian: {
@@ -62,7 +62,7 @@ export const MODE_LIBRARY: Record<ModeId, ModeDefinition> = {
     name: 'Frigio',
     intervals: [0, 1, 3, 5, 7, 8, 10],
     characteristicDegree: 2,
-    characteristicLabel: '♭2 (color español)',
+    characteristicLabel: 'b2 (color español)',
     brightness: -3,
   },
   locrian: {
@@ -70,7 +70,7 @@ export const MODE_LIBRARY: Record<ModeId, ModeDefinition> = {
     name: 'Locrio',
     intervals: [0, 1, 3, 5, 6, 8, 10],
     characteristicDegree: 5,
-    characteristicLabel: '♭5 (inestable)',
+    characteristicLabel: 'b5 (inestable)',
     brightness: -3.5,
   },
 };

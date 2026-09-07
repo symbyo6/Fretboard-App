@@ -50,16 +50,16 @@ const FLAT_NAMES: string[] = [
  */
 export const KEY_DISPLAY_OPTIONS: { value: KeyName; label: string; pitch: PitchClass }[] = [
   { value: 'C', label: 'C', pitch: 0 },
-  { value: 'C#', label: 'C# / Db', pitch: 1 },
+  { value: 'Db', label: 'Db', pitch: 1 },
   { value: 'D', label: 'D', pitch: 2 },
-  { value: 'D#', label: 'D# / Eb', pitch: 3 },
+  { value: 'Eb', label: 'Eb', pitch: 3 },
   { value: 'E', label: 'E', pitch: 4 },
   { value: 'F', label: 'F', pitch: 5 },
-  { value: 'F#', label: 'F# / Gb', pitch: 6 },
+  { value: 'Gb', label: 'Gb', pitch: 6 },
   { value: 'G', label: 'G', pitch: 7 },
-  { value: 'G#', label: 'G# / Ab', pitch: 8 },
+  { value: 'Ab', label: 'Ab', pitch: 8 },
   { value: 'A', label: 'A', pitch: 9 },
-  { value: 'A#', label: 'A# / Bb', pitch: 10 },
+  { value: 'Bb', label: 'Bb', pitch: 10 },
   { value: 'B', label: 'B', pitch: 11 },
 ];
 
@@ -109,6 +109,78 @@ export function getNoteName(pitch: PitchClass, notation: NotationPreference = 's
 
   // 'both'
   return sharp === flat ? sharp : `${sharp} / ${flat}`;
+}
+
+const LETTERS = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
+const LETTER_INDEX: Record<string, number> = Object.fromEntries(
+  LETTERS.map((letter, index) => [letter, index])
+);
+
+function formatSpelledNote(letter: string, accidental: number): string {
+  if (accidental === 0) return letter;
+  if (accidental > 0) return `${letter}${'#'.repeat(accidental)}`;
+  return `${letter}${'b'.repeat(-accidental)}`;
+}
+
+/**
+ * Nombra los grados de una escala sin repetir letras y sin usar E# o B#.
+ * Incluye enarmónicos dobles solo cuando la tonalidad los necesita.
+ */
+export function getScaleNoteNames(
+  scale: Pick<ResolvedScale, 'key' | 'keyPitch' | 'notes' | 'intervalLabels'>,
+  notation: NotationPreference = 'sharps'
+): string[] {
+  if (scale.notes.length > LETTERS.length) {
+    return scale.notes.map((pitch) => getNoteName(pitch, notation));
+  }
+
+  const tonicLetter = scale.key[0];
+  const tonicIndex = LETTER_INDEX[tonicLetter] ?? 0;
+  const candidates = scale.notes.map((pitch, degreeIndex) => {
+    const degreeNumber = Number(scale.intervalLabels[degreeIndex]?.match(/\d+/)?.[0]);
+    const letterOffset = Number.isFinite(degreeNumber) ? degreeNumber - 1 : degreeIndex;
+    const expectedLetter = LETTERS[(tonicIndex + letterOffset) % LETTERS.length];
+    return LETTERS.flatMap((letter) => [-2, -1, 0, 1, 2].map((accidental) => ({
+      name: formatSpelledNote(letter, accidental),
+      letter,
+      accidental,
+      pitch: (([0, 2, 4, 5, 7, 9, 11][LETTER_INDEX[letter]] + accidental) % 12 + 12) % 12,
+      letterDistance: Math.min(
+        Math.abs(LETTER_INDEX[letter] - LETTER_INDEX[expectedLetter]),
+        7 - Math.abs(LETTER_INDEX[letter] - LETTER_INDEX[expectedLetter])
+      ),
+    }))).filter((candidate) => (
+      candidate.pitch === pitch
+      && candidate.name !== 'E#'
+      && candidate.name !== 'B#'
+    ));
+  });
+
+  const orderedCandidates = candidates.map((degreeCandidates) => degreeCandidates.sort((a, b) => {
+    const preferredAccidental = (candidate: { accidental: number }): number => {
+      if (notation === 'flats') return candidate.accidental > 0 ? 1 : 0;
+      if (notation === 'sharps') return candidate.accidental < 0 ? 1 : 0;
+      return 0;
+    };
+
+    return a.letterDistance - b.letterDistance
+      || preferredAccidental(a) - preferredAccidental(b)
+      || Math.abs(a.accidental) - Math.abs(b.accidental);
+  }));
+
+  const choose = (degreeIndex: number, usedLetters: Set<string>): string[] | null => {
+    if (degreeIndex >= orderedCandidates.length) return [];
+
+    for (const candidate of orderedCandidates[degreeIndex]) {
+      if (usedLetters.has(candidate.letter)) continue;
+      const next = choose(degreeIndex + 1, new Set([...usedLetters, candidate.letter]));
+      if (next) return [candidate.name, ...next];
+    }
+
+    return null;
+  };
+
+  return choose(0, new Set()) ?? scale.notes.map((pitch) => getNoteName(pitch, notation));
 }
 
 /**
@@ -168,7 +240,7 @@ export const SCALE_LIBRARY: ScaleDefinition[] = [
   // ---------- MODOS DE LA ESCALA MAYOR ----------
   {
     id: 'ionian',
-    name: 'Mayor (Jonio)',
+    name: 'Jonio (Mayor)',
     category: 'major-modes',
     intervals: [0, 2, 4, 5, 7, 9, 11],
     intervalLabels: ['1', '2', '3', '4', '5', '6', '7'],

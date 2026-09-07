@@ -8,6 +8,9 @@ interface DegreeSelectorProps {
   chords: DiatonicChordInfo[];
   value: number;
   onChange: (degree: number) => void;
+  onChordSelect?: (degree: number) => void;
+  playingChordLabel?: string | null;
+  playingTabPositions?: { string: number; fret: number }[];
   extendedChords: boolean;
   modeDegree: number;
   onModeDegreeChange: (degree: number) => void;
@@ -23,6 +26,9 @@ export function DegreeSelector({
   chords,
   value,
   onChange,
+  onChordSelect,
+  playingChordLabel,
+  playingTabPositions = [],
   extendedChords,
   modeDegree,
   onModeDegreeChange,
@@ -114,43 +120,68 @@ export function DegreeSelector({
         {chords.map((chord) => {
           const isSelected = chord.degree === value;
           const label = getDegreeLabel(chord.degree);
-          const tetradLabel = extendedChords && chord.isExtended
+          const qualityLabel = extendedChords && chord.isExtended
             ? CHORD_QUALITY_SUFFIX[chord.quality]
-            : null;
+            : chord.quality === 'major'
+              ? 'Mayor'
+              : chord.quality === 'minor'
+                ? 'm'
+                : chord.quality === 'diminished'
+                  ? 'dim'
+                  : 'aug';
 
           return (
-            <button
-              key={chord.degree}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              onClick={() => onChange(chord.degree)}
-              style={{
-                minWidth: 56,
-                minHeight: 52,
-                flexShrink: 0,
-                scrollSnapAlign: 'start',
-                borderRadius: '0.6rem',
-                border: isSelected ? '2px solid #be123c' : '1px solid #d6d3d1',
-                background: isSelected ? '#f43f5e' : 'white',
-                color: isSelected ? 'white' : '#292524',
-                fontWeight: 700,
-                fontSize: '1rem',
-                cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '0.15rem',
-              }}
-            >
-              <span>{label}</span>
-              {tetradLabel && (
-                <span style={{ fontSize: '0.6rem', opacity: 0.75 }}>{tetradLabel}</span>
-              )}
-            </button>
+            <div key={chord.degree} style={chordButtonItemStyle}>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={isSelected}
+                onClick={() => (onChordSelect ?? onChange)(chord.degree)}
+                style={{
+                  minWidth: 56,
+                  minHeight: 52,
+                  flexShrink: 0,
+                  scrollSnapAlign: 'start',
+                  borderRadius: '0.6rem',
+                  border: isSelected ? '2px solid #be123c' : '1px solid #d6d3d1',
+                  background: isSelected ? '#f43f5e' : 'white',
+                  color: isSelected ? 'white' : '#292524',
+                  fontWeight: 700,
+                  fontSize: '1rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '0.15rem',
+                }}
+              >
+                <span>{label}</span>
+                <span style={{ fontSize: '0.6rem', opacity: 0.75 }}>{qualityLabel}</span>
+              </button>
+              <span style={chordIntervalsStyle}>
+                {chord.chordIntervals.join(', ')}
+              </span>
+            </div>
           );
         })}
+      </div>
+      <div style={playingChordRowStyle} aria-live="polite">
+        <div style={playingChordContentStyle}>
+          <span style={playingChordLegendStyle}>Acorde sonando</span>
+          <span style={playingChordStyle}>{playingChordLabel ?? '—'}</span>
+          <div style={liveTabStyle} aria-label="Tablatura del acorde sonando">
+            {Array.from({ length: 6 }, (_, index) => {
+              const string = index + 1;
+              const position = playingTabPositions.find((item) => item.string === string);
+              return (
+                <span key={string} style={liveTabStringStyle}>
+                  <span>{position ? position.fret : 'x'}</span>
+                </span>
+              );
+            })}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -217,6 +248,62 @@ const toggleStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+const playingChordStyle: React.CSSProperties = {
+  minHeight: 96,
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: '0 1.65rem',
+  borderRadius: '0.35rem',
+  background: '#dcfce7',
+  color: '#166534',
+  fontSize: '2.16rem',
+  fontWeight: 700,
+};
+
+const liveTabStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 0,
+  minWidth: 82,
+  padding: '0.25rem 0.45rem',
+  border: '1px solid #bbf7d0',
+  borderRadius: '0.35rem',
+  background: '#f0fdf4',
+  color: '#166534',
+  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+  fontSize: '0.9rem',
+  fontWeight: 700,
+  textAlign: 'center',
+};
+
+const liveTabStringStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  minHeight: 22,
+  borderBottom: '1px solid #86efac',
+};
+
+const playingChordRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  marginTop: '0.5rem',
+  width: '100%',
+};
+
+const playingChordContentStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'row',
+  alignItems: 'flex-start',
+  gap: '0.25rem',
+};
+
+const playingChordLegendStyle: React.CSSProperties = {
+  color: '#57534e',
+  fontSize: '0.85rem',
+  fontWeight: 700,
+};
+
 
 const groupStyle: React.CSSProperties = {
   display: 'flex',
@@ -225,4 +312,18 @@ const groupStyle: React.CSSProperties = {
   paddingBottom: '0.3rem',
   WebkitOverflowScrolling: 'touch',
   scrollSnapType: 'x proximity',
+};
+
+const chordButtonItemStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '0.2rem',
+  flexShrink: 0,
+};
+
+const chordIntervalsStyle: React.CSSProperties = {
+  color: '#57534e',
+  fontSize: '0.68rem',
+  whiteSpace: 'nowrap',
 };

@@ -13,7 +13,8 @@ import { buildOverlayRings } from '../src/lib/theory/overlayRings';
 import { getPrimaryCagedShapes } from '../src/lib/theory/caged';
 import { getPrimaryNpsShapes } from '../src/lib/theory/npsShapes';
 import { findBestOverlapPair } from '../src/lib/shapes/shapeComparison';
-import { getMajorDegreePentatonic, getNoteName, resolveScale } from '../src/lib/theory/scales';
+import { getMajorDegreePentatonic, getNoteName, getScaleNoteNames, resolveScale, SCALE_LIBRARY } from '../src/lib/theory/scales';
+import type { PitchClass } from '../src/types';
 import { fretToNoteName } from '../src/lib/audio/tuning';
 
 interface TestResult {
@@ -55,9 +56,39 @@ test('C Ionian resolves to seven scale tones', () => {
   assertEqual(notes, ['C', 'D', 'E', 'F', 'G', 'A', 'B'], 'C Ionian notes');
 });
 
+test('Note naming never emits E# or B#', () => {
+  const names = Array.from({ length: 12 }, (_, pitch) => getNoteName(pitch as PitchClass, 'both'));
+  assert(!names.some((name) => /E#|B#/.test(name)), 'Enharmonic E# and B# names are excluded');
+});
+
+test('Scales with seven or fewer notes use unique note letters', () => {
+  for (const definition of SCALE_LIBRARY) {
+    if (definition.intervals.length > 7) continue;
+
+    const names = getScaleNoteNames(resolveScale(definition.id, 'C'), 'both');
+    const letters = names.map((name) => name[0]);
+    assertEqual(new Set(letters).size, names.length, `${definition.id} repeats a note letter`);
+    assert(!names.some((name) => name === 'E#' || name === 'B#'), `${definition.id} uses a forbidden enharmonic name`);
+  }
+});
+
+test('Tonalities lock to compatible sharp or flat spellings', () => {
+  const sharpScale = resolveScale('ionian', 'D');
+  assertEqual(
+    getScaleNoteNames(sharpScale, 'sharps'),
+    ['D', 'E', 'F#', 'G', 'A', 'B', 'C#'],
+    'D major sharp spelling'
+  );
+  assertEqual(
+    getScaleNoteNames(resolveScale('ionian', 'Ab'), 'flats'),
+    ['Ab', 'Bb', 'C', 'Db', 'Eb', 'F', 'G'],
+    'Ab major flat spelling'
+  );
+});
+
 test('C harmonic major resolves with flat sixth and seventh', () => {
-  const notes = resolveScale('harmonic-major', 'C').notes.map((pitch) => getNoteName(pitch));
-  assertEqual(notes, ['C', 'D', 'E', 'F', 'G', 'G#', 'B'], 'C harmonic major notes');
+  const notes = getScaleNoteNames(resolveScale('harmonic-major', 'C'));
+  assertEqual(notes, ['C', 'D', 'E', 'F', 'G', 'Ab', 'B'], 'C harmonic major notes');
 });
 
 test('Fretboard notes preserve the octave of every string position', () => {
@@ -152,8 +183,13 @@ test('Drop 2 reorders triads and seventh chords without changing their tones', (
   );
   assertEqual(
     toVoicing(seventh, 'drop3-1').tones.map((tone) => tone.role),
+    ['root', 'seventh', 'third', 'fifth'],
+    'Drop 3 position 1 order'
+  );
+  assertEqual(
+    toVoicing(seventh, 'drop3-2').tones.map((tone) => tone.role),
     ['third', 'root', 'fifth', 'seventh'],
-    'Drop 3 order'
+    'Drop 3 position 2 order'
   );
 });
 

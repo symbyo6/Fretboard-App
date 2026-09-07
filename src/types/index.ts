@@ -157,6 +157,7 @@ export interface DiatonicChordInfo {
   degree: number;
   romanNumeral: string;
   nashvilleNumber: string;
+  chordIntervals: string[];
   rootPitch: PitchClass;
   quality: ChordQuality;
   chordTones: PitchClass[];

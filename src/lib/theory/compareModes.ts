@@ -1,6 +1,6 @@
 import type { KeyName } from '../../types';
 import { MODE_LIBRARY, type ModeId } from './modes';
-import { getNoteName, KEY_TO_PITCH, transposePitch } from './scales';
+import { getNoteName, getScaleNoteNames, KEY_TO_PITCH, transposePitch } from './scales';
 
 export interface ModeComparisonResult {
   key: KeyName;
@@ -18,11 +18,20 @@ function transposeNote(key: KeyName, interval: number): string {
   return getNoteName(transposePitch(KEY_TO_PITCH[key], interval));
 }
 
+function getModeNoteNames(key: KeyName, intervals: number[]): string[] {
+  return getScaleNoteNames({
+    key,
+    keyPitch: KEY_TO_PITCH[key],
+    notes: intervals.map((interval) => transposePitch(KEY_TO_PITCH[key], interval)),
+    intervalLabels: intervals.map((_, index) => String(index + 1)),
+  });
+}
+
 /** Compara las notas y grados característicos de los siete modos mayores en una tonalidad. */
 export function compareMajorModes(key: KeyName): ModeComparisonResult {
   const definitions = Object.values(MODE_LIBRARY);
   const modes = definitions.map((definition) => {
-    const notes = definition.intervals.map((interval) => transposeNote(key, interval));
+    const notes = getModeNoteNames(key, definition.intervals);
 
     return {
       id: definition.id,

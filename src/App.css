@@ -81,6 +81,13 @@ h1 {
   line-height: 1.15;
 }
 
+.parent-scale-indicator {
+  color: #78716c;
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
 h2 {
   margin-top: 1.75rem;
   font-size: 1.15rem;

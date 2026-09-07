@@ -43,6 +43,8 @@ import {
 
 interface FretboardProps {
   rootPitch: PitchClass;
+  rootIsRed?: boolean;
+  fundamentalRootPitch?: PitchClass;
   chordRootPitch?: PitchClass;
   scaleToneSet: Set<PitchClass>;
   chordToneSet: Set<PitchClass>;
@@ -88,6 +90,8 @@ const SECONDARY_ROOT_STYLE = {
 
 export function Fretboard({
   rootPitch,
+  rootIsRed = true,
+  fundamentalRootPitch = rootPitch,
   chordRootPitch,
   scaleToneSet,
   chordToneSet,
@@ -346,22 +350,32 @@ export function Fretboard({
             const isSecondaryRoot = chordRootPitch !== undefined
               && chordRootPitch !== rootPitch
               && pitch === chordRootPitch;
-            const style = isSecondaryRoot ? SECONDARY_ROOT_STYLE : CATEGORY_STYLES[category];
+            const isModeRootGreen = category === 'root' && !rootIsRed;
+            const isFundamentalRoot = pitch === fundamentalRootPitch;
             const { x, y } = getPixelPosition(position);
             const label = resolveLabel(position, pitch);
             const isRootInChord = category === 'root' && chordToneSet.has(pitch);
-            const isChordOrRoot = category === 'chordTone' || isRootInChord || isSecondaryRoot;
+            const isChordOrRoot = category === 'chordTone'
+              || isRootInChord
+              || isSecondaryRoot
+              || isModeRootGreen;
             const isMutedRoot = category === 'root' && !isRootInChord;
             const radius = isChordOrRoot
               ? layout.noteRadius
               : isMutedRoot
                 ? layout.noteRadius * 0.48
                 : layout.noteRadius * 0.75;
+            const isHighlighted = highlightedPositions?.has(`${position.string}-${position.fret}`) ?? false;
+            const isPlayedFundamentalRoot = isHighlighted && isFundamentalRoot;
+            const style = isPlayedFundamentalRoot
+              ? CATEGORY_STYLES.root
+              : isSecondaryRoot || isModeRootGreen
+                ? SECONDARY_ROOT_STYLE
+                : CATEGORY_STYLES[category];
             const noteFill = isMutedRoot ? '#cbd5e1' : style.fill;
             const noteStroke = isMutedRoot ? '#94a3b8' : style.stroke;
             const noteFillOpacity = isMutedRoot ? 0.16 : style.opacity;
             const noteStrokeOpacity = isMutedRoot ? 0.2 : 1;
-            const isHighlighted = highlightedPositions?.has(`${position.string}-${position.fret}`) ?? false;
 
             return (
               <g
@@ -394,7 +408,8 @@ export function Fretboard({
                   />
                 )}
 
-                {category === 'root' && (
+                {!isPlayedFundamentalRoot && ((rootIsRed && category === 'root' && isMutedRoot)
+                  || (!rootIsRed && isFundamentalRoot)) && (
                   <circle
                     r={radius + (isMutedRoot ? 6 : 5)}
                     fill="none"

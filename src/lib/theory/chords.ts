@@ -11,6 +11,7 @@ import type {
 } from '../../types';
 import {
   getNoteName,
+  getScaleNoteNames,
   getDegreeLabel,
   getIntervalLabelForDegree,
   normalizePitch,
@@ -91,6 +92,10 @@ export function getChordToneSet(chord: DiatonicChord): Set<PitchClass> {
 
 export type ChordVoicing =
   | 'closed'
+  | 'closed-1'
+  | 'closed-2'
+  | 'closed-3'
+  | 'closed-4'
   | 'drop2-1'
   | 'drop2-2'
   | 'drop2-3'
@@ -109,6 +114,21 @@ export function toVoicing(chord: DiatonicChord, voicing: ChordVoicing): Diatonic
   const inversionMatch = voicing.match(/-(\d)$/);
   const inversion = inversionMatch ? Number(inversionMatch[1]) - 1 : 0;
 
+  if (voicing.startsWith('closed')) {
+    const tones = [
+      ...chord.tones.slice(inversion),
+      ...chord.tones.slice(0, inversion),
+    ];
+    return { ...chord, tones };
+  }
+
+  if (voicing.startsWith('closed')) {
+    return {
+      ...chord,
+      tones: [...chord.tones.slice(inversion), ...chord.tones.slice(0, inversion)],
+    };
+  }
+
   if (voicing.startsWith('drop2') && chord.tones.length === 4) {
     const drop2Orders = [
       [0, 2, 3, 1],
@@ -117,6 +137,17 @@ export function toVoicing(chord: DiatonicChord, voicing: ChordVoicing): Diatonic
       [3, 1, 2, 0],
     ];
     const order = drop2Orders[inversion] ?? drop2Orders[0];
+    return { ...chord, tones: order.map((index) => chord.tones[index]) };
+  }
+
+  if (voicing.startsWith('drop3') && chord.tones.length === 4) {
+    const drop3Orders = [
+      [0, 3, 1, 2],
+      [1, 0, 2, 3],
+      [2, 1, 3, 0],
+      [3, 2, 0, 1],
+    ];
+    const order = drop3Orders[inversion] ?? drop3Orders[0];
     return { ...chord, tones: order.map((index) => chord.tones[index]) };
   }
 
@@ -203,12 +234,12 @@ const SEVENTH_SYMBOLS: Record<SeventhQuality, string> = {
   maj7: 'maj7',
   min7: 'm7',
   dom7: '7',
-  m7b5: 'm7♭5',
+  m7b5: 'm7b5',
   dim7: 'dim7',
   minMaj7: 'm(maj7)',
   aug7: 'aug7',
   augMaj7: 'maj7#5',
-  dom7b5: '7♭5',
+  dom7b5: '7b5',
 };
 
 // ============================================================
@@ -332,6 +363,11 @@ export function buildDiatonicChord(
   const noteCount = extended ? 4 : 3;
   const pitches = stackThirds(scale, degreeIndex, noteCount as 3 | 4);
   const [root, third, fifth, seventh] = pitches;
+  const spelledScaleNotes = getScaleNoteNames(scale, notation);
+  const getSpelledName = (pitch: PitchClass): string => {
+    const scaleIndex = scale.notes.indexOf(pitch);
+    return scaleIndex >= 0 ? spelledScaleNotes[scaleIndex] : getNoteName(pitch, notation);
+  };
 
   const triadQuality = getTriadQuality(scale, degreeIndex);
   const seventhQuality = extended
@@ -353,12 +389,12 @@ export function buildDiatonicChord(
     ? SEVENTH_SYMBOLS[effectiveSeventhQuality]
     : TRIAD_SYMBOLS[triadQuality];
 
-  const rootName = getNoteName(root, notation);
+  const rootName = getSpelledName(root);
   const symbol = `${rootName}${qualitySymbol}`;
 
   const tones: ChordToneInfo[] = pitches.map((pitch, i) => ({
     pitch,
-    noteName: getNoteName(pitch, notation),
+    noteName: getSpelledName(pitch),
     role: i === 0 ? 'root' : i === 1 ? 'third' : i === 2 ? 'fifth' : 'seventh',
   }));
 

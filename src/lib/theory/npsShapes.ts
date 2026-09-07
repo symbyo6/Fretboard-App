@@ -60,32 +60,32 @@ const MELODIC_MINOR_INTERVALS = [0, 2, 3, 5, 7, 9, 11];
 
 const MAJOR_MODE_NAMES = [
   'Jonio (1ª — Mayor)',
-  'Dorian (2º)',
-  'Phrygian (3º)',
-  'Lydian (4º)',
-  'Mixolydian (5º)',
+  'Dorio (2º)',
+  'Frigio (3º)',
+  'Lidio (4º)',
+  'Mixolidio (5º)',
   'Eoleo (6º — menor natural)',
-  'Locrian (7º)',
+  'Locrio (7º)',
 ];
 
 const HARMONIC_MINOR_MODE_NAMES = [
   'Menor armónica (1ª)',
-  'Locrian #6 (2º)',
+  'Locrio #6 (2º)',
   'Jonio #5 (3º)',
-  'Dorian #4 (4º)',
-  'Phrygian dominante (5º)',
-  'Lydian #2 (6º)',
-  'Ultralocrian (7º)',
+  'Dorio #4 (4º)',
+  'Frigio dominante (5º)',
+  'Lidio #2 (6º)',
+  'Ultralocrio (7º)',
 ];
 
 const MELODIC_MINOR_MODE_NAMES = [
   'Menor melódica (1ª)',
-  'Dorian b2 (2º)',
-  'Lydian aumentada (3º)',
-  'Lydian dominante (4º)',
-  'Mixolydian b6 (5º)',
-  'Locrian #2 (6º)',
-  'Alterada (7º — Superlocrian)',
+  'Dorio b2 (2º)',
+  'Lidio aumentado (3º)',
+  'Lidio dominante (4º)',
+  'Mixolidio b6 (5º)',
+  'Locrio #2 (6º)',
+  'Alterada (7º — Superlocrio)',
 ];
 
 function intervalsMatch(a: readonly number[], b: readonly number[]): boolean {

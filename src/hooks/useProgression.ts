@@ -8,15 +8,21 @@ export interface ProgressionStep {
   id: string;
   noteNames: string[];
   label?: string;
+  positions: { string: number; fret: number }[];
+  positionKeys: string[];
+  pitches?: number[];
 }
 
 export type PlaybackMode = 'chord' | 'arpeggio-up' | 'arpeggio-down';
+export type SequenceDirection = 'ascending' | 'descending';
 
 interface UseProgressionOptions {
   bpm?: number;
   mode?: PlaybackMode;
+  direction?: SequenceDirection;
   onStepChange?: (index: number | null) => void;
   onNoteChange?: (index: number | null) => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
 }
 
 interface UseProgressionResult {
@@ -31,7 +37,14 @@ export function useProgression(
   steps: ProgressionStep[],
   options: UseProgressionOptions = {}
 ): UseProgressionResult {
-  const { bpm = 90, mode = 'chord', onStepChange, onNoteChange } = options;
+  const {
+    bpm = 90,
+    mode = 'chord',
+    direction = 'ascending',
+    onStepChange,
+    onNoteChange,
+    onPlayingChange,
+  } = options;
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState<number | null>(null);
@@ -44,9 +57,11 @@ export function useProgression(
 
     Tone.Transport.stop();
     Tone.Transport.cancel();
+    Tone.Transport.position = 0;
     audioEngine.stopAll();
 
     setIsPlaying(false);
+    onPlayingChange?.(false);
     setCurrentIndex(null);
     onStepChange?.(null);
     onNoteChange?.(null);
@@ -57,15 +72,17 @@ export function useProgression(
 
     await audioEngine.unlock();
     stop();
+    Tone.Transport.position = 0;
 
     Tone.Transport.bpm.value = bpm;
     const baseSecondsPerStep = 60 / bpm;
     const minimumNoteSpacing = 0.14;
-    const stepDurations = steps.map((step) => mode === 'chord'
+    const orderedSteps = steps;
+    const stepDurations = orderedSteps.map((step) => mode === 'chord'
       ? baseSecondsPerStep
       : Math.max(baseSecondsPerStep, step.noteNames.length * minimumNoteSpacing));
     let elapsedSeconds = 0;
-    const events = steps.map((step, index) => {
+    const events = orderedSteps.map((step, index) => {
       const event = {
         time: elapsedSeconds,
         index,
@@ -92,13 +109,13 @@ export function useProgression(
           return;
         }
 
-        const orderedNotes = mode === 'arpeggio-down'
+        const orderedNotes = direction === 'descending'
           ? [...event.noteNames].reverse()
           : event.noteNames;
         const spacing = event.durationSeconds / Math.max(orderedNotes.length, 1);
-        onNoteChange?.(mode === 'arpeggio-down' ? orderedNotes.length - 1 : 0);
+        onNoteChange?.(direction === 'descending' ? orderedNotes.length - 1 : 0);
         audioEngine.playArpeggio(orderedNotes, spacing, spacing * 0.9, (noteIndex) => {
-          onNoteChange?.(mode === 'arpeggio-down'
+          onNoteChange?.(direction === 'descending'
             ? orderedNotes.length - 1 - noteIndex
             : noteIndex);
         }, _time);
@@ -110,11 +127,12 @@ export function useProgression(
     partRef.current = part;
     Tone.Transport.start();
     setIsPlaying(true);
+    onPlayingChange?.(true);
 
     Tone.Transport.scheduleOnce(() => {
       stop();
     }, elapsedSeconds + 0.05);
-  }, [steps, bpm, mode, onStepChange, onNoteChange, stop]);
+  }, [steps, bpm, mode, direction, onStepChange, onNoteChange, onPlayingChange, stop]);
 
   return { isPlaying, currentIndex, play, stop };
 }

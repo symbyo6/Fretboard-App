@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type {
   PitchClass,
+  KeyName,
   NotationPreference,
   DiatonicChordInfo,
   DegreeLabelMode,
@@ -16,11 +17,15 @@ import type { ChordVoicing, ChordVoicingType } from '../../lib/theory/chords';
 
 export interface ControlsPanelProps {
   rootPitch: PitchClass;
+  preferredTonicName?: KeyName;
   onRootPitchChange: (pitch: PitchClass) => void;
   scaleId: string;
   onScaleIdChange: (scaleId: string) => void;
   degree: number;
   onDegreeChange: (degree: number) => void;
+  onChordSelect: (degree: number) => void;
+  playingChordLabel?: string | null;
+  playingTabPositions?: { string: number; fret: number }[];
   modeDegree: number;
   onModeDegreeChange: (degree: number) => void;
   modeDescriptions?: Record<number, string>;
@@ -29,7 +34,7 @@ export interface ControlsPanelProps {
   showChordFunctions: boolean;
   diatonicChords: DiatonicChordInfo[];
   notation: NotationPreference;
-  onNotationChange: (notation: NotationPreference) => void;
+  notationLabel: 'flats' | 'sharps' | 'none';
   extendedChords: boolean;
   onExtendedChordsChange: (value: boolean) => void;
   voicing: ChordVoicing;
@@ -58,11 +63,15 @@ function useIsCompactViewport(breakpointPx = 720): boolean {
 /** Contenedor responsive de los controles principales de teoría. */
 export function ControlsPanel({
   rootPitch,
+  preferredTonicName,
   onRootPitchChange,
   scaleId,
   onScaleIdChange,
   degree,
   onDegreeChange,
+  onChordSelect,
+  playingChordLabel,
+  playingTabPositions,
   modeDegree,
   onModeDegreeChange,
   modeDescriptions,
@@ -71,7 +80,7 @@ export function ControlsPanel({
   showChordFunctions,
   diatonicChords,
   notation,
-  onNotationChange,
+  notationLabel,
   extendedChords,
   onExtendedChordsChange,
   voicing,
@@ -126,7 +135,7 @@ export function ControlsPanel({
         >
           <KeySelector
             value={rootPitch}
-            notation={notation}
+            preferredTonicName={preferredTonicName}
             onChange={onRootPitchChange}
           />
 
@@ -134,7 +143,7 @@ export function ControlsPanel({
 
           <NotationAndChordToggles
             notation={notation}
-            onNotationChange={onNotationChange}
+            notationLabel={notationLabel}
             extendedChords={extendedChords}
             onExtendedChordsChange={onExtendedChordsChange}
             voicing={voicing}
@@ -148,6 +157,9 @@ export function ControlsPanel({
               chords={diatonicChords}
               value={degree}
               onChange={onDegreeChange}
+              onChordSelect={onChordSelect}
+              playingChordLabel={playingChordLabel}
+              playingTabPositions={playingTabPositions}
               extendedChords={extendedChords}
               modeDegree={modeDegree}
               onModeDegreeChange={onModeDegreeChange}

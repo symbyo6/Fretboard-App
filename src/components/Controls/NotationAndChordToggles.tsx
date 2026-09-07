@@ -6,7 +6,7 @@ import type { ChordVoicing, ChordVoicingType } from '../../lib/theory/chords';
 
 interface NotationAndChordTogglesProps {
   notation: NotationPreference;
-  onNotationChange: (notation: NotationPreference) => void;
+  notationLabel: 'flats' | 'sharps' | 'none';
   extendedChords: boolean;
   onExtendedChordsChange: (value: boolean) => void;
   voicing: ChordVoicing;
@@ -15,10 +15,21 @@ interface NotationAndChordTogglesProps {
   onVoicingTypeChange: (value: ChordVoicingType) => void;
 }
 
+export interface InversionControlsProps {
+  voicing: ChordVoicing;
+  onVoicingChange: (value: ChordVoicing) => void;
+  onVoicingChangeSilent?: (value: ChordVoicing) => void;
+  onInversionStep?: (direction: 1 | -1) => void;
+  voicingType: ChordVoicingType;
+  onVoicingTypeChange: (value: ChordVoicingType) => void;
+  extendedChords: boolean;
+  onExtendedChordsChange: (value: boolean) => void;
+}
+
 /** Controles compactos para notación y acordes extendidos. */
 export function NotationAndChordToggles({
   notation,
-  onNotationChange,
+  notationLabel,
   extendedChords,
   onExtendedChordsChange,
   voicing,
@@ -26,17 +37,6 @@ export function NotationAndChordToggles({
   voicingType,
   onVoicingTypeChange,
 }: NotationAndChordTogglesProps): JSX.Element {
-  const voicingNumber = voicing === 'closed' ? 1 : Number(voicing.at(-1));
-
-  const handleVoicingTypeChange = (type: ChordVoicingType) => {
-    onVoicingTypeChange(type);
-    if (type === 'closed') {
-      onVoicingChange('closed');
-    } else {
-      onVoicingChange(`${type}-1` as ChordVoicing);
-    }
-  };
-
   return (
     <div
       style={{
@@ -46,95 +46,59 @@ export function NotationAndChordToggles({
         alignItems: 'center',
       }}
     >
-      <div
-        role="radiogroup"
-        aria-label="Preferencia de notación"
-        style={{
-          display: 'inline-flex',
-          border: '1px solid #d6d3d1',
-          borderRadius: '0.5rem',
-          overflow: 'hidden',
-        }}
+      <span
+        aria-label="Armadura de la tonalidad"
+        style={notationIndicatorStyle}
       >
-        {(['sharps', 'flats'] as NotationPreference[]).map((option) => {
-          const isSelected = notation === option;
+        {notationLabel === 'flats'
+          ? '♭ Armadura: Bemoles'
+          : notationLabel === 'sharps'
+            ? '♯ Armadura: Sostenidos'
+            : 'Armadura: ninguna'}
+      </span>
 
-          return (
+    </div>
+  );
+}
+
+export function InversionControls({
+  voicing,
+  onVoicingChange,
+  onVoicingChangeSilent,
+  onInversionStep,
+  voicingType,
+  onVoicingTypeChange,
+  extendedChords,
+  onExtendedChordsChange,
+}: InversionControlsProps): JSX.Element {
+  const voicingNumber = voicing === 'closed' ? 1 : Number(voicing.at(-1));
+  const inversionCount = extendedChords ? 4 : 3;
+  const handleVoicingTypeChange = (type: ChordVoicingType) => {
+    onVoicingTypeChange(type);
+    onVoicingChange(type === 'closed' ? 'closed' : `${type}-1` as ChordVoicing);
+  };
+
+  return (
+    <div style={inversionControlsStyle}>
+      <div role="radiogroup" aria-label="Tipo de inversiones" style={voicingTypeGroupStyle}>
+        <div role="radiogroup" aria-label="Tipo de acorde" style={chordTypeGroupStyle}>
+          {([false, true] as const).map((isTetrad) => (
             <button
-              key={option}
+              key={isTetrad ? 'tetrad' : 'triad'}
               type="button"
               role="radio"
-              aria-checked={isSelected}
-              onClick={() => onNotationChange(option)}
+              aria-checked={extendedChords === isTetrad}
+              onClick={() => onExtendedChordsChange(isTetrad)}
               style={{
-                minWidth: 60,
-                minHeight: 40,
-                border: 'none',
-                background: isSelected ? '#6366f1' : 'white',
-                color: isSelected ? 'white' : '#292524',
-                fontWeight: 600,
-                fontSize: '0.85rem',
-                cursor: 'pointer',
+                ...chordTypeButtonStyle,
+                background: extendedChords === isTetrad ? '#6366f1' : 'white',
+                color: extendedChords === isTetrad ? 'white' : '#292524',
               }}
             >
-              {option === 'sharps' ? '♯ Sostenidos' : '♭ Bemoles'}
+              {isTetrad ? 'Tétrada (7)' : 'Tríada'}
             </button>
-          );
-        })}
-      </div>
-
-      <label
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '0.5rem',
-          minHeight: 44,
-          cursor: 'pointer',
-          fontSize: '0.85rem',
-          fontWeight: 600,
-          color: '#57534e',
-        }}
-      >
-        <span
-          role="switch"
-          aria-checked={extendedChords}
-          tabIndex={0}
-          onClick={() => onExtendedChordsChange(!extendedChords)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              onExtendedChordsChange(!extendedChords);
-            }
-          }}
-          style={{
-            position: 'relative',
-            width: 44,
-            height: 26,
-            borderRadius: 999,
-            background: extendedChords ? '#6366f1' : '#d6d3d1',
-            transition: 'background 0.2s ease',
-            flexShrink: 0,
-          }}
-        >
-          <span
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              top: 3,
-              left: extendedChords ? 21 : 3,
-              width: 20,
-              height: 20,
-              borderRadius: '50%',
-              background: 'white',
-              transition: 'left 0.2s ease',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.3)',
-            }}
-          />
-        </span>
-        Tétradas (7)
-      </label>
-
-      <div role="radiogroup" aria-label="Tipo de inversiones" style={voicingTypeGroupStyle}>
+          ))}
+        </div>
         <span style={voicingTypeLabelStyle}>Tipo de inversiones</span>
         {(['closed', 'drop2', 'drop3'] as ChordVoicingType[]).map((type) => (
           <button
@@ -148,7 +112,6 @@ export function NotationAndChordToggles({
               ...voicingTypeButtonStyle,
               background: voicingType === type ? '#0f766e' : 'white',
               color: voicingType === type ? 'white' : '#292524',
-              cursor: type !== 'closed' && !extendedChords ? 'not-allowed' : 'pointer',
               opacity: type !== 'closed' && !extendedChords ? 0.5 : 1,
             }}
           >
@@ -156,69 +119,64 @@ export function NotationAndChordToggles({
           </button>
         ))}
       </div>
-
-      <div
-        role={voicingType === 'closed' ? undefined : 'radiogroup'}
-        aria-label={voicingType === 'closed' ? undefined : `Inversiones ${voicingType}`}
-        style={voicingPositionsStyle}
-      >
+      <div role="radiogroup" aria-label={`Inversiones ${voicingType}`} style={voicingPositionsStyle}>
         <span style={voicingLabelStyle}>Inversiones</span>
-        {voicingType === 'closed' ? (
-          <span style={closedVoicingHintStyle}>Cerrado no tiene inversiones</span>
-        ) : (
-          <>
-            <button
-              type="button"
-              aria-label="Subir a la próxima inversión"
-              title="Próxima inversión"
-              onClick={() => {
-                const nextPosition = (voicingNumber % 4) + 1;
-                onVoicingChange(`${voicingType}-${nextPosition}` as ChordVoicing);
-              }}
-              style={voicingStepButtonStyle}
-            >
-              ↑
-            </button>
-            {[1, 2, 3, 4].map((position) => {
-              const isSelected = voicingNumber === position;
-
-              return (
-                <button
-                  key={position}
-                  type="button"
-                  role="radio"
-                  aria-checked={isSelected}
-                  aria-label={`${voicingType} posición ${position}`}
-                  onClick={() => onVoicingChange(`${voicingType}-${position}` as ChordVoicing)}
-                  style={{
-                    ...voicingPositionButtonStyle,
-                    background: isSelected ? '#0f766e' : 'white',
-                    color: isSelected ? 'white' : '#292524',
-                    borderColor: isSelected ? '#0f766e' : '#d6d3d1',
-                  }}
-                >
-                  {position}
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              aria-label="Bajar a la inversión anterior"
-              title="Inversión anterior"
-              onClick={() => {
-                const previousPosition = ((voicingNumber + 2) % 4) + 1;
-                onVoicingChange(`${voicingType}-${previousPosition}` as ChordVoicing);
-              }}
-              style={voicingStepButtonStyle}
-            >
-              ↓
-            </button>
-          </>
-        )}
+        <button type="button" aria-label="Subir a la próxima inversión" onClick={() => onInversionStep?.(1)} style={voicingStepButtonStyle}>↑</button>
+        {Array.from({ length: inversionCount }, (_, index) => index + 1).map((position) => (
+          <button
+            key={position}
+            type="button"
+            role="radio"
+            aria-checked={voicingNumber === position}
+            aria-label={`${voicingType} posición ${position}`}
+            onClick={() => (onVoicingChangeSilent ?? onVoicingChange)(`${voicingType}-${position}` as ChordVoicing)}
+            style={{ ...voicingPositionButtonStyle, background: voicingNumber === position ? '#0f766e' : 'white', color: voicingNumber === position ? 'white' : '#292524' }}
+          >
+            {position}
+          </button>
+        ))}
+        <button type="button" aria-label="Bajar a la inversión anterior" onClick={() => onInversionStep?.(-1)} style={voicingStepButtonStyle}>↓</button>
       </div>
     </div>
   );
 }
+
+const inversionControlsStyle: React.CSSProperties = {
+  display: 'flex',
+  flexWrap: 'wrap',
+  alignItems: 'center',
+  gap: '0.75rem',
+};
+
+const chordTypeGroupStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  border: '1px solid #d6d3d1',
+  borderRadius: '0.5rem',
+  overflow: 'hidden',
+};
+
+const chordTypeButtonStyle: React.CSSProperties = {
+  minHeight: 40,
+  padding: '0 0.7rem',
+  border: 'none',
+  borderRight: '1px solid #d6d3d1',
+  fontSize: '0.82rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const notationIndicatorStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 40,
+  padding: '0 0.75rem',
+  border: '1px solid #d6d3d1',
+  borderRadius: '0.5rem',
+  background: '#f8fafc',
+  color: '#57534e',
+  fontSize: '0.85rem',
+  fontWeight: 600,
+};
 
 const voicingLabelStyle: React.CSSProperties = {
   display: 'inline-flex',

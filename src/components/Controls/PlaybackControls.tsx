@@ -5,6 +5,7 @@ import {
   useProgression,
   type ProgressionStep,
   type PlaybackMode,
+  type SequenceDirection,
 } from '../../hooks/useProgression';
 
 interface PlaybackControlsProps {
@@ -15,6 +16,13 @@ interface PlaybackControlsProps {
   upperString: number;
   onStringRangeChange: (lowerString: number, upperString: number) => void;
   extendedChords: boolean;
+  voicingType: 'closed' | 'drop2' | 'drop3';
+  drop3StringGroup: 0 | 1;
+  onDrop3StringGroupChange: (group: 0 | 1) => void;
+  onPlayingChange?: (isPlaying: boolean) => void;
+  sequenceDirection: SequenceDirection;
+  onSequenceDirectionChange: (direction: SequenceDirection) => void;
+  onExportPdf: () => void;
   label?: string;
 }
 
@@ -27,27 +35,43 @@ export function PlaybackControls({
   upperString,
   onStringRangeChange,
   extendedChords,
+  voicingType,
+  drop3StringGroup,
+  onDrop3StringGroupChange,
+  onPlayingChange,
+  sequenceDirection,
+  onSequenceDirectionChange,
+  onExportPdf,
   label = 'Progresión',
 }: PlaybackControlsProps): JSX.Element {
   const [bpm, setBpm] = useState(90);
   const [mode, setMode] = useState<PlaybackMode>('arpeggio-up');
+  const direction = sequenceDirection;
 
   const { isPlaying, currentIndex, play, stop } = useProgression(steps, {
     bpm,
     mode,
+    direction,
     onStepChange,
     onNoteChange,
+    onPlayingChange,
   });
 
   const hasSteps = steps.length > 0;
-  const stringGroupSize = extendedChords ? 4 : 3;
-  const stringGroups = Array.from(
-    { length: 6 - stringGroupSize + 1 },
-    (_, index) => ({
-      lower: 6 - index,
-      upper: 6 - index - stringGroupSize + 1,
-    })
-  );
+  const stringGroups = voicingType === 'drop3'
+    ? [
+      { id: 0 as const, label: '6-4-3-2', lower: 6, upper: 2 },
+      { id: 1 as const, label: '5-3-2-1', lower: 5, upper: 1 },
+    ]
+    : Array.from(
+      { length: 6 - (extendedChords ? 4 : 3) + 1 },
+      (_, index) => ({
+        id: index as 0 | 1,
+        label: `${6 - index}-${6 - index - (extendedChords ? 4 : 3) + 1}`,
+        lower: 6 - index,
+        upper: 6 - index - (extendedChords ? 4 : 3) + 1,
+      })
+    );
 
   return (
     <div style={panelStyle}>
@@ -75,6 +99,14 @@ export function PlaybackControls({
         >
           {isPlaying ? 'Detener' : 'Reproducir'}
         </button>
+        <button
+          type="button"
+          onClick={onExportPdf}
+          disabled={!hasSteps || isPlaying}
+          style={exportButtonStyle}
+        >
+          PDF tab secuencia acordes escala
+        </button>
 
         <div role="group" aria-label="Modo y dirección de reproducción" style={modeGroupStyle}>
           <button
@@ -87,19 +119,23 @@ export function PlaybackControls({
           </button>
           <button
             type="button"
-            onClick={() => setMode((currentMode) => (
-              currentMode === 'arpeggio-up' ? 'arpeggio-down' : 'arpeggio-up'
-            ))}
+            onClick={() => {
+              const nextDirection = direction === 'ascending' ? 'descending' : 'ascending';
+              onSequenceDirectionChange(nextDirection);
+              if (mode !== 'chord') {
+                setMode(nextDirection === 'ascending' ? 'arpeggio-up' : 'arpeggio-down');
+              }
+            }}
             disabled={isPlaying}
-            aria-label={mode === 'arpeggio-up'
+            aria-label={direction === 'ascending'
               ? 'Cambiar a arpegio descendente'
               : 'Cambiar a arpegio ascendente'}
-            title={mode === 'arpeggio-up'
+            title={direction === 'ascending'
               ? 'Cambiar a arpegio descendente'
               : 'Cambiar a arpegio ascendente'}
             style={getModeButtonStyle(mode !== 'chord', isPlaying)}
           >
-            {mode === 'arpeggio-up' ? '↑ Ascendente' : '↓ Descendente'}
+            {direction === 'ascending' ? '↑ Ascendente' : '↓ Descendente'}
           </button>
         </div>
       </div>
@@ -121,19 +157,24 @@ export function PlaybackControls({
         />
       </div>
 
-      <div style={stringGroupsRowStyle} aria-label={`Grupos de ${stringGroupSize} cuerdas`}>
+      <div style={stringGroupsRowStyle} aria-label="Grupos de cuerdas">
         <span style={tempoLabelStyle}>Grupos</span>
         {stringGroups.map((group) => {
-          const isSelected = lowerString === group.lower && upperString === group.upper;
+          const isSelected = voicingType === 'drop3'
+            ? drop3StringGroup === group.id
+            : lowerString === group.lower && upperString === group.upper;
 
           return (
             <button
               key={`${group.lower}-${group.upper}`}
               type="button"
-              onClick={() => onStringRangeChange(group.lower, group.upper)}
+              onClick={() => {
+                if (voicingType === 'drop3') onDrop3StringGroupChange(group.id);
+                else onStringRangeChange(group.lower, group.upper);
+              }}
               disabled={isPlaying}
               aria-pressed={isSelected}
-              title={`${stringGroupSize} cuerdas: ${group.lower} a ${group.upper}`}
+              title={`Cuerdas ${group.label}`}
               style={{
                 ...stringGroupButtonStyle,
                 background: isSelected ? '#0f766e' : 'white',
@@ -142,7 +183,7 @@ export function PlaybackControls({
                 opacity: isPlaying ? 0.6 : 1,
               }}
             >
-              {group.lower}-{group.upper}
+              {group.label}
             </button>
           );
         })}
@@ -207,6 +248,18 @@ const rowStyle: React.CSSProperties = {
 const modeGroupStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.35rem',
+};
+
+const exportButtonStyle: React.CSSProperties = {
+  minHeight: 44,
+  padding: '0 0.8rem',
+  borderRadius: '0.6rem',
+  border: '1px solid #0f766e',
+  background: 'white',
+  color: '#0f766e',
+  fontWeight: 700,
+  fontSize: '0.82rem',
+  cursor: 'pointer',
 };
 
 const getModeButtonStyle = (isSelected: boolean, isPlaying: boolean): React.CSSProperties => ({
