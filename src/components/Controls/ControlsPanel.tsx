@@ -33,6 +33,7 @@ export interface ControlsPanelProps {
   onModeFamilyChange: (family: 'major' | 'harmonic-minor' | 'melodic-minor') => void;
   showChordFunctions: boolean;
   diatonicChords: DiatonicChordInfo[];
+  fundamentalChordName: string;
   notation: NotationPreference;
   notationLabel: 'flats' | 'sharps' | 'none';
   extendedChords: boolean;
@@ -79,6 +80,7 @@ export function ControlsPanel({
   onModeFamilyChange,
   showChordFunctions,
   diatonicChords,
+  fundamentalChordName,
   notation,
   notationLabel,
   extendedChords,
@@ -93,6 +95,14 @@ export function ControlsPanel({
   const isCompact = useIsCompactViewport();
   const [isExpanded, setIsExpanded] = useState(false);
   const shouldShowControls = !isCompact || isExpanded;
+
+  useEffect(() => {
+    if (isCompact) {
+      // Reopen the compact panel when the viewport becomes narrow.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsExpanded(true);
+    }
+  }, [isCompact]);
 
   const currentScaleName = getScaleById(scaleId)?.name ?? scaleId;
   const currentDegreeChord = diatonicChords.find((chord) => chord.degree === degree);
@@ -127,8 +137,9 @@ export function ControlsPanel({
       {shouldShowControls && (
         <div
           style={{
-            display: 'flex',
-            flexDirection: 'column',
+            display: isCompact ? 'flex' : 'grid',
+            gridTemplateColumns: isCompact ? undefined : 'minmax(0, 0.8fr) minmax(0, 1.2fr)',
+            alignItems: 'start',
             gap: '1rem',
             marginTop: isCompact ? '0.75rem' : 0,
           }}
@@ -156,6 +167,7 @@ export function ControlsPanel({
             <DegreeSelector
               chords={diatonicChords}
               value={degree}
+              tonicName={fundamentalChordName}
               onChange={onDegreeChange}
               onChordSelect={onChordSelect}
               playingChordLabel={playingChordLabel}

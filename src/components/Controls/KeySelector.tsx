@@ -26,8 +26,8 @@ export function KeySelector({ value, preferredTonicName, onChange }: KeySelector
         role="radiogroup"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(6, minmax(44px, 1fr))',
-          gap: '0.4rem',
+          gridTemplateColumns: 'repeat(6, minmax(clamp(32px, 9vw, 44px), 1fr))',
+          gap: 'clamp(0.2rem, 1.2vw, 0.4rem)',
         }}
       >
         {ALL_PITCHES.map((pitch) => {
@@ -44,14 +44,14 @@ export function KeySelector({ value, preferredTonicName, onChange }: KeySelector
               aria-checked={isSelected}
               onClick={() => onChange(pitch)}
               style={{
-                minWidth: 44,
-                minHeight: 44,
+                minWidth: 'clamp(32px, 9vw, 44px)',
+                minHeight: 'clamp(34px, 9vw, 44px)',
                 borderRadius: '0.6rem',
                 border: isSelected ? '2px solid #4338ca' : '1px solid #d6d3d1',
                 background: isSelected ? '#6366f1' : 'white',
                 color: isSelected ? 'white' : '#292524',
                 fontWeight: isSelected ? 700 : 500,
-                fontSize: '0.95rem',
+                fontSize: 'clamp(0.72rem, 2.8vw, 0.95rem)',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
               }}

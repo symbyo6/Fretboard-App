@@ -7,6 +7,7 @@ import { CHORD_QUALITY_SUFFIX } from '../../lib/theory/chords';
 interface DegreeSelectorProps {
   chords: DiatonicChordInfo[];
   value: number;
+  tonicName: string;
   onChange: (degree: number) => void;
   onChordSelect?: (degree: number) => void;
   playingChordLabel?: string | null;
@@ -25,6 +26,7 @@ interface DegreeSelectorProps {
 export function DegreeSelector({
   chords,
   value,
+  tonicName,
   onChange,
   onChordSelect,
   playingChordLabel,
@@ -113,11 +115,12 @@ export function DegreeSelector({
       </div>
       </div>
 
-      <div
-        role="radiogroup"
-        style={groupStyle}
-      >
-        {chords.map((chord) => {
+      <div style={chordRowStyle}>
+        <div
+          role="radiogroup"
+          style={groupStyle}
+        >
+          {chords.map((chord) => {
           const isSelected = chord.degree === value;
           const label = getDegreeLabel(chord.degree);
           const qualityLabel = extendedChords && chord.isExtended
@@ -130,16 +133,16 @@ export function DegreeSelector({
                   ? 'dim'
                   : 'aug';
 
-          return (
-            <div key={chord.degree} style={chordButtonItemStyle}>
+            return (
+              <div key={chord.degree} style={chordButtonItemStyle}>
               <button
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
                 onClick={() => (onChordSelect ?? onChange)(chord.degree)}
                 style={{
-                  minWidth: 56,
-                  minHeight: 52,
+                  minWidth: 'clamp(40px, 11vw, 56px)',
+                  minHeight: 'clamp(40px, 10vw, 52px)',
                   flexShrink: 0,
                   scrollSnapAlign: 'start',
                   borderRadius: '0.6rem',
@@ -147,7 +150,7 @@ export function DegreeSelector({
                   background: isSelected ? '#f43f5e' : 'white',
                   color: isSelected ? 'white' : '#292524',
                   fontWeight: 700,
-                  fontSize: '1rem',
+                  fontSize: 'clamp(0.72rem, 2.8vw, 1rem)',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
@@ -162,9 +165,16 @@ export function DegreeSelector({
               <span style={chordIntervalsStyle}>
                 {chord.chordIntervals.join(', ')}
               </span>
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={selectionSummaryRowStyle}>
+        <div style={selectionSummaryStyle} aria-label="Tonalidad actual">
+          <span style={selectionSummaryLabelStyle}>Tonalidad</span>
+          <span style={selectionSummaryValueStyle}>{tonicName}</span>
+        </div>
       </div>
       <div style={playingChordRowStyle} aria-live="polite">
         <div style={playingChordContentStyle}>
@@ -249,14 +259,14 @@ const toggleStyle: React.CSSProperties = {
 };
 
 const playingChordStyle: React.CSSProperties = {
-  minHeight: 96,
+  minHeight: 'clamp(58px, 16vw, 96px)',
   display: 'inline-flex',
   alignItems: 'center',
-  padding: '0 1.65rem',
+  padding: '0 clamp(0.55rem, 3vw, 1.65rem)',
   borderRadius: '0.35rem',
   background: '#dcfce7',
   color: '#166534',
-  fontSize: '2.16rem',
+  fontSize: 'clamp(1.2rem, 7vw, 2.16rem)',
   fontWeight: 700,
 };
 
@@ -293,9 +303,12 @@ const playingChordRowStyle: React.CSSProperties = {
 
 const playingChordContentStyle: React.CSSProperties = {
   display: 'flex',
+  flexWrap: 'wrap',
   flexDirection: 'row',
   alignItems: 'flex-start',
+  justifyContent: 'flex-end',
   gap: '0.25rem',
+  maxWidth: '100%',
 };
 
 const playingChordLegendStyle: React.CSSProperties = {
@@ -307,11 +320,61 @@ const playingChordLegendStyle: React.CSSProperties = {
 
 const groupStyle: React.CSSProperties = {
   display: 'flex',
+  flex: '1 1 auto',
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
   gap: '0.4rem',
-  overflowX: 'auto',
+  flexWrap: 'wrap',
+  overflowX: 'visible',
   paddingBottom: '0.3rem',
   WebkitOverflowScrolling: 'touch',
   scrollSnapType: 'x proximity',
+};
+
+const chordRowStyle: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'stretch',
+  gap: '0.75rem',
+  minWidth: 0,
+};
+
+const selectionSummaryRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  marginTop: '0.5rem',
+  width: '100%',
+};
+
+const selectionSummaryStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  flex: '0 0 clamp(72px, 18vw, 112px)',
+  minWidth: 'clamp(72px, 18vw, 112px)',
+  minHeight: 'clamp(72px, 16vw, 104px)',
+  gap: '0.35rem',
+  padding: '0.7rem',
+  border: '1px solid #d6d3d1',
+  borderRadius: '0.6rem',
+  background: '#fff',
+  textAlign: 'center',
+};
+
+const selectionSummaryLabelStyle: React.CSSProperties = {
+  color: '#57534e',
+  fontSize: 'clamp(0.72rem, 2.4vw, 1rem)',
+  fontWeight: 700,
+  lineHeight: 1.1,
+  whiteSpace: 'nowrap',
+};
+
+const selectionSummaryValueStyle: React.CSSProperties = {
+  color: '#292524',
+  fontSize: 'clamp(1.25rem, 6vw, 2rem)',
+  fontWeight: 700,
+  lineHeight: 1,
+  whiteSpace: 'nowrap',
 };
 
 const chordButtonItemStyle: React.CSSProperties = {
@@ -320,10 +383,13 @@ const chordButtonItemStyle: React.CSSProperties = {
   alignItems: 'center',
   gap: '0.2rem',
   flexShrink: 0,
+  maxWidth: '100%',
 };
 
 const chordIntervalsStyle: React.CSSProperties = {
   color: '#57534e',
-  fontSize: '0.68rem',
-  whiteSpace: 'nowrap',
+  fontSize: 'clamp(0.54rem, 1.8vw, 0.68rem)',
+  maxWidth: '100%',
+  overflowWrap: 'anywhere',
+  textAlign: 'center',
 };

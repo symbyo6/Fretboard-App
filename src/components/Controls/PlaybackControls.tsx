@@ -85,15 +85,15 @@ export function PlaybackControls({
           onClick={isPlaying ? stop : play}
           disabled={!hasSteps}
           style={{
-            minHeight: 44,
-            minWidth: 44,
-            padding: '0 1rem',
+            minHeight: 'clamp(36px, 9vw, 44px)',
+            minWidth: 'clamp(36px, 9vw, 44px)',
+            padding: '0 clamp(0.45rem, 2vw, 1rem)',
             borderRadius: '0.6rem',
             border: 'none',
             background: !hasSteps ? '#d6d3d1' : isPlaying ? '#dc2626' : '#16a34a',
             color: 'white',
             fontWeight: 700,
-            fontSize: '0.9rem',
+            fontSize: 'clamp(0.72rem, 2.6vw, 0.9rem)',
             cursor: hasSteps ? 'pointer' : 'not-allowed',
           }}
         >
@@ -251,26 +251,26 @@ const modeGroupStyle: React.CSSProperties = {
 };
 
 const exportButtonStyle: React.CSSProperties = {
-  minHeight: 44,
-  padding: '0 0.8rem',
+  minHeight: 'clamp(36px, 9vw, 44px)',
+  padding: '0 clamp(0.45rem, 2vw, 0.8rem)',
   borderRadius: '0.6rem',
   border: '1px solid #0f766e',
   background: 'white',
   color: '#0f766e',
   fontWeight: 700,
-  fontSize: '0.82rem',
+  fontSize: 'clamp(0.62rem, 2.2vw, 0.82rem)',
   cursor: 'pointer',
 };
 
 const getModeButtonStyle = (isSelected: boolean, isPlaying: boolean): React.CSSProperties => ({
-  minHeight: 44,
-  padding: '0 0.6rem',
+  minHeight: 'clamp(36px, 9vw, 44px)',
+  padding: '0 clamp(0.35rem, 1.5vw, 0.6rem)',
   borderRadius: '0.5rem',
   border: isSelected ? '2px solid #6366f1' : '1px solid #d6d3d1',
   background: isSelected ? '#6366f1' : 'white',
   color: isSelected ? 'white' : '#292524',
   fontWeight: isSelected ? 700 : 500,
-  fontSize: '0.78rem',
+  fontSize: 'clamp(0.62rem, 2.2vw, 0.78rem)',
   cursor: isPlaying ? 'not-allowed' : 'pointer',
   opacity: isPlaying ? 0.6 : 1,
 });
@@ -304,12 +304,12 @@ const stringGroupsRowStyle: React.CSSProperties = {
 };
 
 const stringGroupButtonStyle: React.CSSProperties = {
-  minWidth: 42,
-  minHeight: 38,
-  padding: '0 0.45rem',
+  minWidth: 'clamp(34px, 8vw, 42px)',
+  minHeight: 'clamp(32px, 8vw, 38px)',
+  padding: '0 clamp(0.25rem, 1.2vw, 0.45rem)',
   border: '1px solid',
   borderRadius: '0.4rem',
-  fontSize: '0.78rem',
+  fontSize: 'clamp(0.62rem, 2.2vw, 0.78rem)',
   fontWeight: 700,
   cursor: 'pointer',
 };

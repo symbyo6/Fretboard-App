@@ -117,8 +117,30 @@ export function Fretboard({
   );
 
   const [zoom, setZoom] = useState(0.6);
-  const clampZoom = (value: number) => Math.min(1.6, Math.max(0.6, value));
+  const [autoFit, setAutoFit] = useState(true);
+  const clampZoom = (value: number) => Math.min(1.6, Math.max(0.35, value));
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!autoFit) return;
+    const element = wrapperRef.current;
+    if (!element) return;
+
+    const updateZoom = () => {
+      const availableWidth = element.clientWidth;
+      if (availableWidth <= 0) return;
+      const fitZoom = availableWidth / layout.totalWidth;
+      setZoom(Math.min(1.6, fitZoom));
+    };
+
+    updateZoom();
+
+    const observer = new ResizeObserver(updateZoom);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [layout.totalWidth, autoFit]);
 
   useEffect(() => {
     if (!highlightWindow || !scrollContainerRef.current) return;
@@ -182,7 +204,7 @@ export function Fretboard({
   }, [highlightWindow, layout]);
 
   return (
-    <div className="fretboard-wrapper" style={{ position: 'relative' }}>
+    <div ref={wrapperRef} className="fretboard-wrapper" style={{ position: 'relative' }}>
       <div
         className="fretboard-zoom-controls"
         style={{
@@ -194,7 +216,10 @@ export function Fretboard({
       >
         <button
           type="button"
-          onClick={() => setZoom((value) => clampZoom(value - 0.15))}
+          onClick={() => {
+            setAutoFit(false);
+            setZoom((value) => clampZoom(value - 0.15));
+          }}
           aria-label="Alejar diapasón"
           style={zoomButtonStyle}
         >
@@ -202,15 +227,18 @@ export function Fretboard({
         </button>
         <button
           type="button"
-          onClick={() => setZoom(1)}
-          aria-label="Restablecer zoom"
+          onClick={() => setAutoFit(true)}
+          aria-label="Ajustar al ancho de pantalla"
           style={zoomButtonStyle}
         >
           ⟲
         </button>
         <button
           type="button"
-          onClick={() => setZoom((value) => clampZoom(value + 0.15))}
+          onClick={() => {
+            setAutoFit(false);
+            setZoom((value) => clampZoom(value + 0.15));
+          }}
           aria-label="Acercar diapasón"
           style={zoomButtonStyle}
         >

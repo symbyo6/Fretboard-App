@@ -195,8 +195,8 @@ const voicingPositionsStyle: React.CSSProperties = {
 };
 
 const voicingPositionButtonStyle: React.CSSProperties = {
-  minWidth: 38,
-  minHeight: 38,
+  minWidth: 'clamp(30px, 8vw, 38px)',
+  minHeight: 'clamp(30px, 8vw, 38px)',
   border: '1px solid',
   borderRadius: '0.4rem',
   fontWeight: 700,
@@ -204,13 +204,13 @@ const voicingPositionButtonStyle: React.CSSProperties = {
 };
 
 const voicingStepButtonStyle: React.CSSProperties = {
-  minWidth: 38,
-  minHeight: 38,
+  minWidth: 'clamp(30px, 8vw, 38px)',
+  minHeight: 'clamp(30px, 8vw, 38px)',
   border: '1px solid #d6d3d1',
   borderRadius: '0.4rem',
   background: 'white',
   color: '#292524',
-  fontSize: '1.1rem',
+  fontSize: 'clamp(0.85rem, 3vw, 1.1rem)',
   fontWeight: 700,
   cursor: 'pointer',
 };
@@ -222,11 +222,12 @@ const closedVoicingHintStyle: React.CSSProperties = {
 };
 
 const voicingTypeGroupStyle: React.CSSProperties = {
-  display: 'inline-flex',
+  display: 'flex',
+  flexWrap: 'wrap',
   alignItems: 'center',
   border: '1px solid #d6d3d1',
   borderRadius: '0.5rem',
-  overflow: 'hidden',
+  overflow: 'visible',
 };
 
 const voicingTypeLabelStyle: React.CSSProperties = {
@@ -238,11 +239,11 @@ const voicingTypeLabelStyle: React.CSSProperties = {
 };
 
 const voicingTypeButtonStyle: React.CSSProperties = {
-  minHeight: 40,
-  padding: '0 0.7rem',
+  minHeight: 'clamp(32px, 8vw, 40px)',
+  padding: '0 clamp(0.35rem, 1.8vw, 0.7rem)',
   border: 'none',
   borderRight: '1px solid #d6d3d1',
   fontWeight: 600,
-  fontSize: '0.85rem',
+  fontSize: 'clamp(0.62rem, 2.4vw, 0.85rem)',
   cursor: 'pointer',
 };

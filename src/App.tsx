@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, type JSX } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import * as Tone from 'tone';
 import { ControlsPanel } from './components/Controls/ControlsPanel';
 import { PlaybackControls } from './components/Controls/PlaybackControls';
@@ -283,6 +283,7 @@ function getArpeggioPositions(
 }
 
 function App(): JSX.Element {
+  const appShellRef = useRef<HTMLElement>(null);
   const { playNote, playChord } = useAudioEngine();
   const [key, setKey] = useState<KeyName>('C');
   const [modeBaseKey, setModeBaseKey] = useState<KeyName>('C');
@@ -305,6 +306,45 @@ function App(): JSX.Element {
   const [isSequencePlaying, setIsSequencePlaying] = useState(false);
   const [sequenceDirection, setSequenceDirection] = useState<SequenceDirection>('ascending');
 
+  useEffect(() => {
+    const shell = appShellRef.current;
+    if (!shell) return;
+
+    let updateScheduled = false;
+    let isUpdating = false;
+    const fitAppToViewport = () => {
+      if (isUpdating) return;
+      isUpdating = true;
+      shell.style.zoom = '1';
+      const naturalWidth = shell.scrollWidth;
+      const naturalHeight = shell.scrollHeight;
+      const scale = Math.min(
+        1,
+        (window.innerWidth - 4) / Math.max(naturalWidth, 1),
+        (window.innerHeight - 4) / Math.max(naturalHeight, 1)
+      );
+      shell.style.zoom = String(Math.max(scale, 0.2));
+      isUpdating = false;
+      updateScheduled = false;
+    };
+    const scheduleFit = () => {
+      if (updateScheduled) return;
+      updateScheduled = true;
+      window.requestAnimationFrame(fitAppToViewport);
+    };
+
+    scheduleFit();
+    window.addEventListener('resize', scheduleFit);
+    const observer = new ResizeObserver(scheduleFit);
+    observer.observe(shell);
+
+    return () => {
+      window.removeEventListener('resize', scheduleFit);
+      observer.disconnect();
+      shell.style.zoom = '1';
+    };
+  }, []);
+
   const signatureNotation = getKeySignatureNotation(modeBaseKey, modeFamily);
   const signatureLabel = getKeySignatureLabel(modeBaseKey, modeFamily);
   const effectiveNotation = signatureNotation;
@@ -315,6 +355,10 @@ function App(): JSX.Element {
   const modeBaseScale = useMemo(
     () => resolveScale(MODE_FAMILY_BASE_IDS[modeFamily], modeBaseKey),
     [modeBaseKey, modeFamily]
+  );
+  const fundamentalChord = useMemo(
+    () => getAllDiatonicChords(modeBaseScale, extendedChords, effectiveNotation, 'roman')[0],
+    [effectiveNotation, extendedChords, modeBaseScale]
   );
   const modeTitle = `${key} ${getScaleById(scaleId)?.name ?? scale.scaleName}`;
   const modeFamilyIds = MODE_FAMILY_IDS[modeFamily];
@@ -768,7 +812,7 @@ function App(): JSX.Element {
     : 'Modo';
 
   return (
-    <main className="app-shell">
+    <main ref={appShellRef} className="app-shell">
       <section className="phase-one">
         <span className="creator-credit">Creado por Juan Anderson</span>
         <p className="eyebrow">Localizador de teoría en el diapasón de la guitarra</p>
@@ -826,6 +870,7 @@ function App(): JSX.Element {
           onModeFamilyChange={handleModeFamilyChange}
           showChordFunctions={supportsChordFunctions}
           diatonicChords={chordInfo}
+          fundamentalChordName={fundamentalChord?.symbol ?? modeBaseKey}
           notation={effectiveNotation}
           notationLabel={signatureLabel}
           extendedChords={extendedChords}
