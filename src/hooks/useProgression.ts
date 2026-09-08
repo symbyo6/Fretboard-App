@@ -23,6 +23,7 @@ interface UseProgressionOptions {
   onStepChange?: (index: number | null) => void;
   onNoteChange?: (index: number | null) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
+  onPlaybackError?: (error: unknown) => void;
 }
 
 interface UseProgressionResult {
@@ -44,6 +45,7 @@ export function useProgression(
     onStepChange,
     onNoteChange,
     onPlayingChange,
+    onPlaybackError,
   } = options;
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -70,7 +72,12 @@ export function useProgression(
   const play = useCallback(async () => {
     if (steps.length === 0) return;
 
-    await audioEngine.unlock();
+    try {
+      await audioEngine.unlock();
+    } catch (error) {
+      onPlaybackError?.(error);
+      return;
+    }
     stop();
     Tone.Transport.position = 0;
 
@@ -132,7 +139,7 @@ export function useProgression(
     Tone.Transport.scheduleOnce(() => {
       stop();
     }, elapsedSeconds + 0.05);
-  }, [steps, bpm, mode, direction, onStepChange, onNoteChange, onPlayingChange, stop]);
+  }, [steps, bpm, mode, direction, onStepChange, onNoteChange, onPlayingChange, onPlaybackError, stop]);
 
   return { isPlaying, currentIndex, play, stop };
 }

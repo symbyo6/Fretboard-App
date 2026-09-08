@@ -20,6 +20,9 @@ interface PlaybackControlsProps {
   drop3StringGroup: 0 | 1;
   onDrop3StringGroupChange: (group: 0 | 1) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
+  onUnlockAudio: () => Promise<void>;
+  keepLastPlayed: boolean;
+  onKeepLastPlayedChange: (keep: boolean) => void;
   sequenceDirection: SequenceDirection;
   onSequenceDirectionChange: (direction: SequenceDirection) => void;
   onExportPdf: () => void;
@@ -39,13 +42,17 @@ export function PlaybackControls({
   drop3StringGroup,
   onDrop3StringGroupChange,
   onPlayingChange,
+  onUnlockAudio,
+  keepLastPlayed,
+  onKeepLastPlayedChange,
   sequenceDirection,
   onSequenceDirectionChange,
   onExportPdf,
   label = 'Progresión',
 }: PlaybackControlsProps): JSX.Element {
   const [bpm, setBpm] = useState(90);
-  const [mode, setMode] = useState<PlaybackMode>('arpeggio-up');
+  const [mode, setMode] = useState<PlaybackMode>('chord');
+  const [audioError, setAudioError] = useState(false);
   const direction = sequenceDirection;
 
   const { isPlaying, currentIndex, play, stop } = useProgression(steps, {
@@ -55,9 +62,18 @@ export function PlaybackControls({
     onStepChange,
     onNoteChange,
     onPlayingChange,
+    onPlaybackError: () => setAudioError(true),
   });
 
   const hasSteps = steps.length > 0;
+  const handleUnlockAudio = async () => {
+    setAudioError(false);
+    try {
+      await onUnlockAudio();
+    } catch {
+      setAudioError(true);
+    }
+  };
   const stringGroups = voicingType === 'drop3'
     ? [
       { id: 0 as const, label: '6-4-3-2', lower: 6, upper: 2 },
@@ -80,6 +96,16 @@ export function PlaybackControls({
       </div>
 
       <div style={rowStyle}>
+        {audioError && (
+          <button
+            type="button"
+            onClick={() => { void handleUnlockAudio(); }}
+            aria-label="Error de audio"
+            style={{ ...audioButtonStyle, ...audioErrorButtonStyle }}
+          >
+            Reintentar sonido
+          </button>
+        )}
         <button
           type="button"
           onClick={isPlaying ? stop : play}
@@ -138,6 +164,14 @@ export function PlaybackControls({
             {direction === 'ascending' ? '↑ Ascendente' : '↓ Descendente'}
           </button>
         </div>
+        <label style={keepLastPlayedStyle}>
+          <input
+            type="checkbox"
+            checked={keepLastPlayed}
+            onChange={(event) => onKeepLastPlayedChange(event.target.checked)}
+          />
+          Mantener último
+        </label>
       </div>
 
       <div style={tempoRowStyle}>
@@ -238,6 +272,24 @@ const titleStyle: React.CSSProperties = {
   marginBottom: '0.5rem',
 };
 
+const audioButtonStyle: React.CSSProperties = {
+  minHeight: 'clamp(36px, 9vw, 44px)',
+  padding: '0 clamp(0.45rem, 2vw, 0.9rem)',
+  borderRadius: '0.6rem',
+  border: '1px solid #b45309',
+  background: '#fef3c7',
+  color: '#92400e',
+  fontWeight: 700,
+  fontSize: 'clamp(0.68rem, 2.4vw, 0.85rem)',
+  cursor: 'pointer',
+};
+
+const audioErrorButtonStyle: React.CSSProperties = {
+  borderColor: '#b91c1c',
+  background: '#fee2e2',
+  color: '#991b1b',
+};
+
 const rowStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.5rem',
@@ -248,6 +300,17 @@ const rowStyle: React.CSSProperties = {
 const modeGroupStyle: React.CSSProperties = {
   display: 'flex',
   gap: '0.35rem',
+};
+
+const keepLastPlayedStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.3rem',
+  minHeight: 'clamp(32px, 8vw, 40px)',
+  color: '#57534e',
+  fontSize: 'clamp(0.62rem, 2.2vw, 0.78rem)',
+  fontWeight: 600,
+  whiteSpace: 'nowrap',
 };
 
 const exportButtonStyle: React.CSSProperties = {

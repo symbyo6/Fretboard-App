@@ -61,11 +61,8 @@ export function DegreeSelector({
   };
 
   return (
-    <div aria-label="Selector de grado diatónico">
-      <div style={legendHeaderStyle}>
-        <span style={legendStyle}>
-          Grado escala fundamental · Modo mostrado: {modeDegreeLabels[modeDegree - 1]}
-        </span>
+    <div className="degree-selector-layout" aria-label="Selector de grado diatónico">
+      <div className="degree-selector-legend" style={legendHeaderStyle}>
         <div style={familyStyle} role="radiogroup" aria-label="Escala fundamental">
           {([
             ['major', 'Mayor'],
@@ -85,7 +82,7 @@ export function DegreeSelector({
           ))}
         </div>
       </div>
-      <div style={headerStyle}>
+      <div className="degree-selector-mode-buttons" style={headerStyle}>
         <div style={rangeStyle}>
           {chords.map((chord) => (
             <button
@@ -115,7 +112,7 @@ export function DegreeSelector({
       </div>
       </div>
 
-      <div style={chordRowStyle}>
+      <div className="degree-selector-red-buttons" style={chordRowStyle}>
         <div
           role="radiogroup"
           style={groupStyle}
@@ -141,8 +138,8 @@ export function DegreeSelector({
                 aria-checked={isSelected}
                 onClick={() => (onChordSelect ?? onChange)(chord.degree)}
                 style={{
-                  minWidth: 'clamp(40px, 11vw, 56px)',
-                  minHeight: 'clamp(40px, 10vw, 52px)',
+                  minWidth: 'clamp(120px, 33vw, 168px)',
+                  minHeight: 'clamp(120px, 30vw, 156px)',
                   flexShrink: 0,
                   scrollSnapAlign: 'start',
                   borderRadius: '0.6rem',
@@ -150,7 +147,7 @@ export function DegreeSelector({
                   background: isSelected ? '#f43f5e' : 'white',
                   color: isSelected ? 'white' : '#292524',
                   fontWeight: 700,
-                  fontSize: 'clamp(0.72rem, 2.8vw, 1rem)',
+                  fontSize: 'clamp(2.16rem, 8.4vw, 3rem)',
                   cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
@@ -160,7 +157,7 @@ export function DegreeSelector({
                 }}
               >
                 <span>{label}</span>
-                <span style={{ fontSize: '0.6rem', opacity: 0.75 }}>{qualityLabel}</span>
+                <span style={{ fontSize: 'clamp(1.2rem, 4.2vw, 1.8rem)', opacity: 0.75 }}>{qualityLabel}</span>
               </button>
               <span style={chordIntervalsStyle}>
                 {chord.chordIntervals.join(', ')}
@@ -170,13 +167,13 @@ export function DegreeSelector({
           })}
         </div>
       </div>
-      <div style={selectionSummaryRowStyle}>
+      <div className="degree-selector-summary" style={selectionSummaryRowStyle}>
         <div style={selectionSummaryStyle} aria-label="Tonalidad actual">
           <span style={selectionSummaryLabelStyle}>Tonalidad</span>
           <span style={selectionSummaryValueStyle}>{tonicName}</span>
         </div>
       </div>
-      <div style={playingChordRowStyle} aria-live="polite">
+      <div className="degree-selector-playing" style={playingChordRowStyle} aria-live="polite">
         <div style={playingChordContentStyle}>
           <span style={playingChordLegendStyle}>Acorde sonando</span>
           <span style={playingChordStyle}>{playingChordLabel ?? '—'}</span>
@@ -227,14 +224,14 @@ const rangeStyle: React.CSSProperties = {
 };
 
 const getRangeButtonStyle = (isSelected: boolean, isDisabled: boolean): React.CSSProperties => ({
-  minWidth: 34,
-  minHeight: 32,
-  padding: '0 0.3rem',
+  minWidth: 102,
+  minHeight: 96,
+  padding: '0 0.9rem',
   border: `1px solid ${isSelected ? '#0f766e' : '#d6d3d1'}`,
   borderRadius: '0.35rem',
   background: isSelected ? '#0f766e' : 'white',
   color: isSelected ? 'white' : '#292524',
-  fontSize: '0.72rem',
+  fontSize: '2.16rem',
   fontWeight: 700,
   cursor: isDisabled ? 'not-allowed' : 'pointer',
   opacity: isDisabled ? 0.45 : 1,
@@ -247,26 +244,26 @@ const legendStyle: React.CSSProperties = {
 };
 
 const toggleStyle: React.CSSProperties = {
-  minHeight: 32,
-  padding: '0 0.6rem',
+  minHeight: 96,
+  padding: '0 1.8rem',
   borderRadius: '999px',
   border: '1px solid #d6d3d1',
   background: '#f8fafc',
-  fontSize: '0.72rem',
+  fontSize: '2.16rem',
   fontWeight: 600,
   color: '#57534e',
   cursor: 'pointer',
 };
 
 const playingChordStyle: React.CSSProperties = {
-  minHeight: 'clamp(58px, 16vw, 96px)',
+  minHeight: 'clamp(116px, 32vw, 192px)',
   display: 'inline-flex',
   alignItems: 'center',
-  padding: '0 clamp(0.55rem, 3vw, 1.65rem)',
+  padding: '0 clamp(1.1rem, 6vw, 3.3rem)',
   borderRadius: '0.35rem',
   background: '#dcfce7',
   color: '#166534',
-  fontSize: 'clamp(1.2rem, 7vw, 2.16rem)',
+  fontSize: 'clamp(2.4rem, 14vw, 4.32rem)',
   fontWeight: 700,
 };
 
@@ -274,14 +271,14 @@ const liveTabStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 0,
-  minWidth: 82,
-  padding: '0.25rem 0.45rem',
+  minWidth: 164,
+  padding: '0.5rem 0.9rem',
   border: '1px solid #bbf7d0',
   borderRadius: '0.35rem',
   background: '#f0fdf4',
   color: '#166534',
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: '0.9rem',
+  fontSize: '1.8rem',
   fontWeight: 700,
   textAlign: 'center',
 };
@@ -290,13 +287,13 @@ const liveTabStringStyle: React.CSSProperties = {
   display: 'flex',
   justifyContent: 'center',
   alignItems: 'center',
-  minHeight: 22,
+  minHeight: 44,
   borderBottom: '1px solid #86efac',
 };
 
 const playingChordRowStyle: React.CSSProperties = {
   display: 'flex',
-  justifyContent: 'flex-end',
+  justifyContent: 'flex-start',
   marginTop: '0.5rem',
   width: '100%',
 };
@@ -306,7 +303,7 @@ const playingChordContentStyle: React.CSSProperties = {
   flexWrap: 'wrap',
   flexDirection: 'row',
   alignItems: 'flex-start',
-  justifyContent: 'flex-end',
+  justifyContent: 'flex-start',
   gap: '0.25rem',
   maxWidth: '100%',
 };
@@ -341,7 +338,7 @@ const chordRowStyle: React.CSSProperties = {
 
 const selectionSummaryRowStyle: React.CSSProperties = {
   display: 'flex',
-  justifyContent: 'flex-end',
+  justifyContent: 'flex-start',
   marginTop: '0.5rem',
   width: '100%',
 };
@@ -350,11 +347,11 @@ const selectionSummaryStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   justifyContent: 'center',
-  flex: '0 0 clamp(72px, 18vw, 112px)',
-  minWidth: 'clamp(72px, 18vw, 112px)',
-  minHeight: 'clamp(72px, 16vw, 104px)',
-  gap: '0.35rem',
-  padding: '0.7rem',
+  flex: '0 0 clamp(240px, 48vw, 360px)',
+  minWidth: 'clamp(240px, 48vw, 360px)',
+  minHeight: 'clamp(144px, 32vw, 208px)',
+  gap: '0.7rem',
+  padding: '1.4rem',
   border: '1px solid #d6d3d1',
   borderRadius: '0.6rem',
   background: '#fff',
@@ -363,7 +360,7 @@ const selectionSummaryStyle: React.CSSProperties = {
 
 const selectionSummaryLabelStyle: React.CSSProperties = {
   color: '#57534e',
-  fontSize: 'clamp(0.72rem, 2.4vw, 1rem)',
+  fontSize: 'clamp(1.44rem, 4.8vw, 2rem)',
   fontWeight: 700,
   lineHeight: 1.1,
   whiteSpace: 'nowrap',
@@ -371,10 +368,11 @@ const selectionSummaryLabelStyle: React.CSSProperties = {
 
 const selectionSummaryValueStyle: React.CSSProperties = {
   color: '#292524',
-  fontSize: 'clamp(1.25rem, 6vw, 2rem)',
+  fontSize: 'clamp(2rem, 9vw, 3.3rem)',
   fontWeight: 700,
   lineHeight: 1,
   whiteSpace: 'nowrap',
+  letterSpacing: 0,
 };
 
 const chordButtonItemStyle: React.CSSProperties = {

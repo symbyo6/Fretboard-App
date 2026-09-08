@@ -27,6 +27,7 @@ import {
 
 import { getNoteName } from '../../lib/theory/scales';
 import { classifyPitch } from '../../lib/theory/chords';
+import { downloadFretboardPdf, type FretboardPdfDetails } from '../../lib/tabPdf';
 
 import {
   computeFretboardLayout,
@@ -57,6 +58,7 @@ interface FretboardProps {
   fretCount?: number;
   layoutConfig?: Partial<FretboardLayoutConfig>;
   onNotePlay?: (position: FretboardPosition, pitch: PitchClass) => void;
+  pdfDetails?: FretboardPdfDetails;
   children?: (ctx: {
     getPixelPosition: (position: FretboardPosition) => PixelPoint;
     layout: FretboardLayout;
@@ -104,6 +106,7 @@ export function Fretboard({
   fretCount = DEFAULT_FRET_COUNT,
   layoutConfig,
   onNotePlay,
+  pdfDetails,
   children,
 }: FretboardProps): JSX.Element {
   const layout = useMemo(
@@ -121,6 +124,7 @@ export function Fretboard({
   const clampZoom = (value: number) => Math.min(1.6, Math.max(0.35, value));
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
 
   useEffect(() => {
     if (!autoFit) return;
@@ -203,6 +207,28 @@ export function Fretboard({
     return getFretRangePixelBounds(highlightWindow.minFret, highlightWindow.maxFret, layout);
   }, [highlightWindow, layout]);
 
+  const exportPdf = (exportHighlightsOnly: boolean) => {
+    if (!svgRef.current) return;
+    const highlightedFrets = Array.from(highlightedPositions ?? [])
+      .map((key) => Number(key.split('-')[1]))
+      .filter(Number.isFinite);
+    const minFret = highlightedFrets.length > 0 ? Math.min(...highlightedFrets) : 0;
+    const maxFret = highlightedFrets.length > 0 ? Math.max(...highlightedFrets) : layout.fretCount;
+    const bounds = getFretRangePixelBounds(minFret, maxFret, layout);
+    const padding = 20;
+    const left = Math.max(0, bounds.left - padding);
+    const viewBox = exportHighlightsOnly && highlightedFrets.length > 0
+      ? {
+        x: left,
+        y: 0,
+        width: Math.min(layout.totalWidth, bounds.right + padding) - left,
+        height: layout.totalHeight,
+      }
+      : undefined;
+    void downloadFretboardPdf(svgRef.current, pdfDetails, viewBox);
+    setIsPdfChoiceOpen(false);
+  };
+
   return (
     <div ref={wrapperRef} className="fretboard-wrapper" style={{ position: 'relative' }}>
       <div
@@ -244,6 +270,25 @@ export function Fretboard({
         >
           +
         </button>
+        <button
+          type="button"
+          onClick={() => exportPdf(true)}
+          disabled={!highlightedPositions?.size}
+          aria-label="Exportar frets resaltados a PDF"
+          title="Exportar solo los frets resaltados a PDF"
+          style={pdfButtonStyle}
+        >
+          PDF frets resaltados
+        </button>
+        <button
+          type="button"
+          onClick={() => exportPdf(false)}
+          aria-label="Exportar diapasón completo a PDF"
+          title="Exportar el diapasón completo a PDF"
+          style={pdfButtonStyle}
+        >
+          PDF diapasón completo
+        </button>
       </div>
 
       <div
@@ -259,6 +304,7 @@ export function Fretboard({
         }}
       >
         <svg
+          ref={svgRef}
           width={layout.totalWidth * zoom}
           height={layout.totalHeight * zoom}
           viewBox={`0 0 ${layout.totalWidth} ${layout.totalHeight}`}
@@ -501,6 +547,18 @@ const zoomButtonStyle: React.CSSProperties = {
   border: '1px solid #d6d3d1',
   background: 'white',
   fontSize: '1.1rem',
+  cursor: 'pointer',
+};
+
+const pdfButtonStyle: React.CSSProperties = {
+  minHeight: 44,
+  padding: '0 0.7rem',
+  borderRadius: '0.5rem',
+  border: '1px solid #0f766e',
+  background: '#f0fdfa',
+  color: '#0f766e',
+  fontSize: '0.8rem',
+  fontWeight: 700,
   cursor: 'pointer',
 };
 

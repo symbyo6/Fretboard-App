@@ -108,6 +108,7 @@ const CHORD_INTERVAL_LABELS: Record<number, string> = {
 };
 
 const MAX_FRETBOARD_FRET = 24;
+const MAX_VOICING_FRET_SPAN = 5;
 
 function getChordIntervalLabels(chord: DiatonicChord | undefined): string[] {
   if (!chord) return [];
@@ -284,7 +285,7 @@ function getArpeggioPositions(
 
 function App(): JSX.Element {
   const appShellRef = useRef<HTMLElement>(null);
-  const { playNote, playChord } = useAudioEngine();
+  const { unlock, playNote, playChord } = useAudioEngine();
   const [key, setKey] = useState<KeyName>('C');
   const [modeBaseKey, setModeBaseKey] = useState<KeyName>('C');
   const [scaleId, setScaleId] = useState('ionian');
@@ -303,6 +304,7 @@ function App(): JSX.Element {
   const [lastChordVoiceMidis, setLastChordVoiceMidis] = useState<number[] | null>(null);
   const chordHighlightTimerRef = useRef<number | null>(null);
   const [playingChordLabel, setPlayingChordLabel] = useState<string | null>(null);
+  const [keepLastPlayed, setKeepLastPlayed] = useState(true);
   const [isSequencePlaying, setIsSequencePlaying] = useState(false);
   const [sequenceDirection, setSequenceDirection] = useState<SequenceDirection>('ascending');
 
@@ -403,7 +405,7 @@ function App(): JSX.Element {
         -Infinity,
         false,
         false,
-        voicing === 'closed' ? undefined : 5,
+        MAX_VOICING_FRET_SPAN,
         sequenceDirection === 'ascending',
         voicing.startsWith('drop3'),
         []
@@ -453,7 +455,7 @@ function App(): JSX.Element {
           previousLowStringMidi,
           false,
           false,
-          voicing === 'closed' ? undefined : 5,
+          MAX_VOICING_FRET_SPAN,
           sequenceDirection === 'ascending',
           chordIndex === 0,
           previousVoiceMidis,
@@ -481,6 +483,12 @@ function App(): JSX.Element {
                 fret,
                 midi: Tone.Frequency(fretToNoteName(position.string - 1, fret)).toMidi(),
               }))
+              .filter((alternative) => {
+                const frets = previousStep.positions.map((candidate, index) => (
+                  index === voiceIndex ? alternative.fret : candidate.fret
+                ));
+                return Math.max(...frets) - Math.min(...frets) <= MAX_VOICING_FRET_SPAN;
+              })
               .sort((a, b) => Math.abs(currentMidi - a.midi) - Math.abs(currentMidi - b.midi));
 
             return alternatives[0] && Math.abs(currentMidi - alternatives[0].midi) < Math.abs(currentMidi - previousMidi)
@@ -541,6 +549,7 @@ function App(): JSX.Element {
       window.clearTimeout(chordHighlightTimerRef.current);
     }
     chordHighlightTimerRef.current = window.setTimeout(() => {
+      if (keepLastPlayed) return;
       setLastChordPositionKeys([]);
       setPlayingChordLabel(null);
       chordHighlightTimerRef.current = null;
@@ -578,7 +587,7 @@ function App(): JSX.Element {
         previousLowMidi,
         false,
         false,
-        nextVoicing === 'closed' ? undefined : 5,
+        MAX_VOICING_FRET_SPAN,
         searchAscending,
         nextVoicing.startsWith('drop3'),
         previousVoices
@@ -613,11 +622,15 @@ function App(): JSX.Element {
         -Infinity,
         false,
         false,
-        voicing === 'closed' ? undefined : 5,
-        true,
+        MAX_VOICING_FRET_SPAN,
+        direction > 0,
         voicing.startsWith('drop3')
       )
       : null;
+    const previousLowMidi = lastChordLowStringMidi ?? currentResult?.lowStringMidi ?? -Infinity;
+    const previousVoices = lastChordVoiceMidis
+      ?? currentResult?.noteNames.map((note) => Tone.Frequency(note).toMidi())
+      ?? [];
 
     if (voicingType === 'drop3') {
       handleVoicingChange(
@@ -625,11 +638,11 @@ function App(): JSX.Element {
         getDrop3StringSet(drop3StringGroup),
         isSequencePlaying,
         isSequencePlaying,
-        wrapsForward || wrapsBackward ? -Infinity : currentResult?.lowStringMidi ?? -Infinity,
+        wrapsForward || wrapsBackward ? -Infinity : previousLowMidi,
         direction > 0,
         wrapsForward || wrapsBackward
           ? []
-          : currentResult?.noteNames.map((note) => Tone.Frequency(note).toMidi()) ?? []
+          : previousVoices
       );
       return;
     }
@@ -640,11 +653,11 @@ function App(): JSX.Element {
       Array.from({ length: size }, (_, index) => lowerString - index),
       isSequencePlaying,
       isSequencePlaying,
-      wrapsForward || wrapsBackward ? -Infinity : currentResult?.lowStringMidi ?? -Infinity,
+      wrapsForward || wrapsBackward ? -Infinity : previousLowMidi,
       direction > 0,
       wrapsForward || wrapsBackward
         ? []
-        : currentResult?.noteNames.map((note) => Tone.Frequency(note).toMidi()) ?? []
+        : previousVoices
     );
   };
 
@@ -666,7 +679,7 @@ function App(): JSX.Element {
           -Infinity,
           false,
           false,
-          voicing === 'closed' ? undefined : 5,
+          MAX_VOICING_FRET_SPAN,
           true,
           voicing.startsWith('drop3')
         )
@@ -680,7 +693,7 @@ function App(): JSX.Element {
         lastChordLowStringMidi ?? previousResult?.lowStringMidi ?? -Infinity,
         false,
         false,
-        voicing === 'closed' ? undefined : 5,
+          MAX_VOICING_FRET_SPAN,
         ascending,
         voicing.startsWith('drop3'),
         lastChordVoiceMidis
@@ -732,9 +745,11 @@ function App(): JSX.Element {
       setPlayingChordLabel(null);
     } else {
       setActiveStepIndex(null);
-      setLastChordPositionKeys(null);
       setLastChordVoiceMidis(null);
-      setPlayingChordLabel(null);
+      if (!keepLastPlayed) {
+        setLastChordPositionKeys(null);
+        setPlayingChordLabel(null);
+      }
     }
   };
 
@@ -756,7 +771,7 @@ function App(): JSX.Element {
         -Infinity,
         false,
         false,
-        voicing === 'closed' ? undefined : 5,
+        MAX_VOICING_FRET_SPAN,
         true,
         voicing.startsWith('drop3'),
         lastChordVoiceMidis ?? []
@@ -899,6 +914,15 @@ function App(): JSX.Element {
               setLastChordPositionKeys(null);
             }}
             onPlayingChange={handleSequencePlayingChange}
+            onUnlockAudio={unlock}
+            keepLastPlayed={keepLastPlayed}
+            onKeepLastPlayedChange={(keep) => {
+              setKeepLastPlayed(keep);
+              if (!keep) {
+                setLastChordPositionKeys(null);
+                setPlayingChordLabel(null);
+              }
+            }}
             sequenceDirection={sequenceDirection}
             onSequenceDirectionChange={setSequenceDirection}
             onExportPdf={() => downloadTabPdf({
@@ -944,6 +968,19 @@ function App(): JSX.Element {
           chordToneSet={chordToneSet}
           notation={effectiveNotation}
           highlightedPositions={highlightedPositions}
+          pdfDetails={{
+            title: `${modeTitle} - Diapasón`,
+            key: modeBaseKey,
+            scale: modeBaseScale.scaleName,
+            mode: getScaleById(scaleId)?.name ?? scale.scaleName,
+            chord: selectedChord?.symbol,
+            chordType: extendedChords ? 'Tétrada (7)' : 'Tríada',
+            inversion: String(voicing === 'closed' ? 1 : voicing.at(-1)),
+            voicing: voicing === 'closed' ? 'Cerrado' : voicing,
+            stringGroup: voicingType === 'drop3'
+              ? getDrop3StringSet(drop3StringGroup).join('-')
+              : `${lowerString}-${upperString}`,
+          }}
           onNotePlay={(position) => playNote(fretToNoteName(position.string - 1, position.fret))}
         />
       </section>

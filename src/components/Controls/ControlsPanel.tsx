@@ -138,7 +138,7 @@ export function ControlsPanel({
         <div
           style={{
             display: isCompact ? 'flex' : 'grid',
-            gridTemplateColumns: isCompact ? undefined : 'minmax(0, 0.8fr) minmax(0, 1.2fr)',
+            gridTemplateColumns: isCompact ? undefined : 'minmax(0, 1fr)',
             alignItems: 'start',
             gap: '1rem',
             marginTop: isCompact ? '0.75rem' : 0,
