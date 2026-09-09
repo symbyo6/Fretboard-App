@@ -44,6 +44,8 @@ export interface ControlsPanelProps {
   onVoicingTypeChange: (value: ChordVoicingType) => void;
   degreeLabelMode: DegreeLabelMode;
   onDegreeLabelModeChange: (mode: DegreeLabelMode) => void;
+  isMuted: boolean;
+  onToggleMuted: () => void;
 }
 
 /** Detecta viewport angosto sin depender de hooks externos. */
@@ -91,6 +93,8 @@ export function ControlsPanel({
   onVoicingTypeChange,
   degreeLabelMode,
   onDegreeLabelModeChange,
+  isMuted,
+  onToggleMuted,
 }: ControlsPanelProps): JSX.Element {
   const isCompact = useIsCompactViewport();
   const [isExpanded, setIsExpanded] = useState(false);
@@ -180,6 +184,8 @@ export function ControlsPanel({
               onModeFamilyChange={onModeFamilyChange}
               labelMode={degreeLabelMode}
               onLabelModeChange={onDegreeLabelModeChange}
+              isMuted={isMuted}
+              onToggleMuted={onToggleMuted}
             />
           )}
         </div>

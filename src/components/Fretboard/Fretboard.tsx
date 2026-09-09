@@ -59,6 +59,9 @@ interface FretboardProps {
   layoutConfig?: Partial<FretboardLayoutConfig>;
   onNotePlay?: (position: FretboardPosition, pitch: PitchClass) => void;
   pdfDetails?: FretboardPdfDetails;
+  onExportSequencePdf?: () => void;
+  hasSequenceSteps?: boolean;
+  isSequencePlaying?: boolean;
   children?: (ctx: {
     getPixelPosition: (position: FretboardPosition) => PixelPoint;
     layout: FretboardLayout;
@@ -76,7 +79,7 @@ const CATEGORY_STYLES: Record<
   root: { fill: '#f43f5e', stroke: '#be123c', opacity: 1, textColor: '#ffffff' },
   chordTone: { fill: '#6366f1', stroke: '#4338ca', opacity: 1, textColor: '#ffffff' },
   scaleTone: { fill: '#cbd5e1', stroke: '#94a3b8', opacity: 0.55, textColor: '#334155' },
-  outside: { fill: 'transparent', stroke: 'transparent', opacity: 0, textColor: 'transparent' },
+  outside: { fill: '#e7e5e4', stroke: '#d6d3d1', opacity: 0.35, textColor: 'transparent' },
 };
 
 const SECONDARY_ROOT_STYLE = {
@@ -107,6 +110,9 @@ export function Fretboard({
   layoutConfig,
   onNotePlay,
   pdfDetails,
+  onExportSequencePdf,
+  hasSequenceSteps = false,
+  isSequencePlaying = false,
   children,
 }: FretboardProps): JSX.Element {
   const layout = useMemo(
@@ -189,8 +195,6 @@ export function Fretboard({
               ? 'scaleTone'
               : 'outside';
 
-        if (category === 'outside') continue;
-
         positions.push({
           position: { string, fret, pitch },
           pitch,
@@ -226,7 +230,6 @@ export function Fretboard({
       }
       : undefined;
     void downloadFretboardPdf(svgRef.current, pdfDetails, viewBox);
-    setIsPdfChoiceOpen(false);
   };
 
   return (
@@ -289,6 +292,18 @@ export function Fretboard({
         >
           PDF diapasón completo
         </button>
+        {onExportSequencePdf && (
+          <button
+            type="button"
+            onClick={onExportSequencePdf}
+            disabled={!hasSequenceSteps || isSequencePlaying}
+            aria-label="Exportar tab de la secuencia de acordes a PDF"
+            title="Exportar tab de la secuencia de acordes a PDF"
+            style={pdfButtonStyle}
+          >
+            PDF tab secuencia acordes escala
+          </button>
+        )}
       </div>
 
       <div
@@ -411,8 +426,8 @@ export function Fretboard({
               <text
                 key={`fretnum-${fret}`}
                 x={getNoteX(fret, layout)}
-                y={layout.marginTop + (layout.stringCount - 1) * layout.stringGap + 22}
-                fontSize={11}
+                y={layout.marginTop + (layout.stringCount - 1) * layout.stringGap + 30}
+                fontSize={22}
                 fill="#a8a29e"
                 textAnchor="middle"
               >
@@ -460,17 +475,19 @@ export function Fretboard({
                 role="button"
                 tabIndex={0}
                 aria-label={getPositionLabel(position, notation)}
-                style={{ cursor: onNotePlay ? 'pointer' : 'default' }}
+                style={{ cursor: onNotePlay ? 'pointer' : 'default', outline: 'none' }}
               >
                 <circle r={22} fill="transparent" />
-                <circle
-                  r={radius}
-                  fill={noteFill}
-                  fillOpacity={noteFillOpacity}
-                  stroke={noteStroke}
-                  strokeWidth={category === 'root' ? 2.5 : 1.5}
-                  strokeOpacity={noteStrokeOpacity}
-                />
+                {category !== 'outside' && (
+                  <circle
+                    r={radius}
+                    fill={noteFill}
+                    fillOpacity={noteFillOpacity}
+                    stroke={noteStroke}
+                    strokeWidth={category === 'root' ? 2.5 : 1.5}
+                    strokeOpacity={noteStrokeOpacity}
+                  />
+                )}
 
                 {isHighlighted && (
                   <circle
@@ -551,13 +568,13 @@ const zoomButtonStyle: React.CSSProperties = {
 };
 
 const pdfButtonStyle: React.CSSProperties = {
-  minHeight: 44,
-  padding: '0 0.7rem',
+  minHeight: 58,
+  padding: '0 1.2rem',
   borderRadius: '0.5rem',
   border: '1px solid #0f766e',
   background: '#f0fdfa',
   color: '#0f766e',
-  fontSize: '0.8rem',
+  fontSize: '1.25rem',
   fontWeight: 700,
   cursor: 'pointer',
 };

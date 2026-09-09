@@ -25,7 +25,6 @@ interface PlaybackControlsProps {
   onKeepLastPlayedChange: (keep: boolean) => void;
   sequenceDirection: SequenceDirection;
   onSequenceDirectionChange: (direction: SequenceDirection) => void;
-  onExportPdf: () => void;
   label?: string;
 }
 
@@ -47,7 +46,6 @@ export function PlaybackControls({
   onKeepLastPlayedChange,
   sequenceDirection,
   onSequenceDirectionChange,
-  onExportPdf,
   label = 'Progresión',
 }: PlaybackControlsProps): JSX.Element {
   const [bpm, setBpm] = useState(90);
@@ -111,27 +109,19 @@ export function PlaybackControls({
           onClick={isPlaying ? stop : play}
           disabled={!hasSteps}
           style={{
-            minHeight: 'clamp(36px, 9vw, 44px)',
-            minWidth: 'clamp(36px, 9vw, 44px)',
-            padding: '0 clamp(0.45rem, 2vw, 1rem)',
-            borderRadius: '0.6rem',
+            minHeight: 'clamp(56px, 12vw, 68px)',
+            minWidth: 'clamp(56px, 12vw, 68px)',
+            padding: '0 clamp(0.9rem, 3.4vw, 1.6rem)',
+            borderRadius: '0.7rem',
             border: 'none',
             background: !hasSteps ? '#d6d3d1' : isPlaying ? '#dc2626' : '#16a34a',
             color: 'white',
             fontWeight: 700,
-            fontSize: 'clamp(0.72rem, 2.6vw, 0.9rem)',
+            fontSize: 'clamp(1.3rem, 4.4vw, 1.6rem)',
             cursor: hasSteps ? 'pointer' : 'not-allowed',
           }}
         >
           {isPlaying ? 'Detener' : 'Reproducir'}
-        </button>
-        <button
-          type="button"
-          onClick={onExportPdf}
-          disabled={!hasSteps || isPlaying}
-          style={exportButtonStyle}
-        >
-          PDF tab secuencia acordes escala
         </button>
 
         <div role="group" aria-label="Modo y dirección de reproducción" style={modeGroupStyle}>
@@ -170,7 +160,7 @@ export function PlaybackControls({
             checked={keepLastPlayed}
             onChange={(event) => onKeepLastPlayedChange(event.target.checked)}
           />
-          Mantener último
+          Mantener último tab
         </label>
       </div>
 
@@ -187,7 +177,7 @@ export function PlaybackControls({
           value={bpm}
           onChange={(event) => setBpm(Number(event.target.value))}
           disabled={isPlaying}
-          style={{ flex: 1, minHeight: 44 }}
+          style={{ flex: 1, minHeight: 56 }}
         />
       </div>
 
@@ -232,8 +222,8 @@ export function PlaybackControls({
               <div
                 key={step.id}
                 style={{
-                  minWidth: 36,
-                  minHeight: 36,
+                  minWidth: 56,
+                  minHeight: 56,
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
@@ -241,7 +231,7 @@ export function PlaybackControls({
                   borderRadius: '0.4rem',
                   border: isActive ? '2px solid #16a34a' : '1px solid #d6d3d1',
                   background: isActive ? '#dcfce7' : 'white',
-                  fontSize: '0.72rem',
+                  fontSize: '1.25rem',
                   fontWeight: isActive ? 700 : 500,
                   color: isActive ? '#166534' : '#57534e',
                   transition: 'all 0.15s ease',
@@ -266,21 +256,21 @@ const panelStyle: React.CSSProperties = {
 };
 
 const titleStyle: React.CSSProperties = {
-  fontSize: '0.8rem',
-  fontWeight: 600,
+  fontSize: '1.3rem',
+  fontWeight: 700,
   color: '#57534e',
   marginBottom: '0.5rem',
 };
 
 const audioButtonStyle: React.CSSProperties = {
-  minHeight: 'clamp(36px, 9vw, 44px)',
-  padding: '0 clamp(0.45rem, 2vw, 0.9rem)',
+  minHeight: 'clamp(52px, 11vw, 62px)',
+  padding: '0 clamp(0.8rem, 2.8vw, 1.4rem)',
   borderRadius: '0.6rem',
   border: '1px solid #b45309',
   background: '#fef3c7',
   color: '#92400e',
   fontWeight: 700,
-  fontSize: 'clamp(0.68rem, 2.4vw, 0.85rem)',
+  fontSize: 'clamp(1.15rem, 3.6vw, 1.4rem)',
   cursor: 'pointer',
 };
 
@@ -292,48 +282,37 @@ const audioErrorButtonStyle: React.CSSProperties = {
 
 const rowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: '0.5rem',
+  gap: '0.6rem',
   flexWrap: 'wrap',
-  marginBottom: '0.6rem',
+  alignItems: 'center',
+  marginBottom: '0.7rem',
 };
 
 const modeGroupStyle: React.CSSProperties = {
   display: 'flex',
-  gap: '0.35rem',
+  gap: '0.4rem',
 };
 
 const keepLastPlayedStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: '0.3rem',
-  minHeight: 'clamp(32px, 8vw, 40px)',
+  gap: '0.5rem',
+  minHeight: 'clamp(48px, 10vw, 58px)',
   color: '#57534e',
-  fontSize: 'clamp(0.62rem, 2.2vw, 0.78rem)',
-  fontWeight: 600,
+  fontSize: 'clamp(1.1rem, 3.8vw, 1.35rem)',
+  fontWeight: 700,
   whiteSpace: 'nowrap',
 };
 
-const exportButtonStyle: React.CSSProperties = {
-  minHeight: 'clamp(36px, 9vw, 44px)',
-  padding: '0 clamp(0.45rem, 2vw, 0.8rem)',
-  borderRadius: '0.6rem',
-  border: '1px solid #0f766e',
-  background: 'white',
-  color: '#0f766e',
-  fontWeight: 700,
-  fontSize: 'clamp(0.62rem, 2.2vw, 0.82rem)',
-  cursor: 'pointer',
-};
-
 const getModeButtonStyle = (isSelected: boolean, isPlaying: boolean): React.CSSProperties => ({
-  minHeight: 'clamp(36px, 9vw, 44px)',
-  padding: '0 clamp(0.35rem, 1.5vw, 0.6rem)',
+  minHeight: 'clamp(52px, 11vw, 62px)',
+  padding: '0 clamp(0.7rem, 2.6vw, 1.2rem)',
   borderRadius: '0.5rem',
   border: isSelected ? '2px solid #6366f1' : '1px solid #d6d3d1',
   background: isSelected ? '#6366f1' : 'white',
   color: isSelected ? 'white' : '#292524',
   fontWeight: isSelected ? 700 : 500,
-  fontSize: 'clamp(0.62rem, 2.2vw, 0.78rem)',
+  fontSize: 'clamp(1.1rem, 3.8vw, 1.35rem)',
   cursor: isPlaying ? 'not-allowed' : 'pointer',
   opacity: isPlaying ? 0.6 : 1,
 });
@@ -341,19 +320,20 @@ const getModeButtonStyle = (isSelected: boolean, isPlaying: boolean): React.CSSP
 const tempoRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: '0.6rem',
-  marginBottom: '0.6rem',
+  gap: '0.7rem',
+  marginBottom: '0.7rem',
 };
 
 const tempoLabelStyle: React.CSSProperties = {
-  fontSize: '0.76rem',
-  color: '#78716c',
+  fontSize: '1.3rem',
+  fontWeight: 700,
+  color: '#57534e',
   flexShrink: 0,
 };
 
 const stepsStyle: React.CSSProperties = {
   display: 'flex',
-  gap: '0.3rem',
+  gap: '0.35rem',
   overflowX: 'auto',
   paddingBottom: '0.2rem',
 };
@@ -362,17 +342,17 @@ const stringGroupsRowStyle: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   flexWrap: 'wrap',
-  gap: '0.35rem',
-  marginBottom: '0.6rem',
+  gap: '0.4rem',
+  marginBottom: '0.7rem',
 };
 
 const stringGroupButtonStyle: React.CSSProperties = {
-  minWidth: 'clamp(34px, 8vw, 42px)',
-  minHeight: 'clamp(32px, 8vw, 38px)',
-  padding: '0 clamp(0.25rem, 1.2vw, 0.45rem)',
+  minWidth: 'clamp(54px, 10vw, 66px)',
+  minHeight: 'clamp(50px, 10vw, 60px)',
+  padding: '0 clamp(0.45rem, 1.6vw, 0.75rem)',
   border: '1px solid',
   borderRadius: '0.4rem',
-  fontSize: 'clamp(0.62rem, 2.2vw, 0.78rem)',
+  fontSize: 'clamp(1.1rem, 3.8vw, 1.35rem)',
   fontWeight: 700,
   cursor: 'pointer',
 };

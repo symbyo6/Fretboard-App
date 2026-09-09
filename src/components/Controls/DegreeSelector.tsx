@@ -20,6 +20,8 @@ interface DegreeSelectorProps {
   onModeFamilyChange: (family: 'major' | 'harmonic-minor' | 'melodic-minor') => void;
   labelMode?: DegreeLabelMode;
   onLabelModeChange?: (mode: DegreeLabelMode) => void;
+  isMuted: boolean;
+  onToggleMuted: () => void;
 }
 
 /** Fila horizontal de grados diatónicos, desplazable en pantallas pequeñas. */
@@ -39,6 +41,8 @@ export function DegreeSelector({
   onModeFamilyChange,
   labelMode = 'roman',
   onLabelModeChange,
+  isMuted,
+  onToggleMuted,
 }: DegreeSelectorProps): JSX.Element {
   const [internalLabelMode, setInternalLabelMode] = useState<DegreeLabelMode>(labelMode);
   const activeLabelMode = onLabelModeChange ? labelMode : internalLabelMode;
@@ -63,61 +67,69 @@ export function DegreeSelector({
   return (
     <div className="degree-selector-layout" aria-label="Selector de grado diatónico">
       <div className="degree-selector-legend" style={legendHeaderStyle}>
-        <div style={familyStyle} role="radiogroup" aria-label="Escala fundamental">
-          {([
-            ['major', 'Mayor'],
-            ['harmonic-minor', 'Menor armónica'],
-            ['melodic-minor', 'Menor melódica'],
-          ] as const).map(([family, label]) => (
-            <button
-              key={family}
-              type="button"
-              role="radio"
-              aria-checked={modeFamily === family}
-              onClick={() => onModeFamilyChange(family)}
-              style={getRangeButtonStyle(modeFamily === family, false)}
-            >
-              {label}
-            </button>
-          ))}
+        <div style={rangeWrapperStyle}>
+          <span style={modeLegendStyle}>Escala</span>
+          <div style={familyStyle} role="radiogroup" aria-label="Escala fundamental">
+            {([
+              ['major', 'Mayor'],
+              ['harmonic-minor', 'Menor armónica'],
+              ['melodic-minor', 'Menor melódica'],
+            ] as const).map(([family, label]) => (
+              <button
+                key={family}
+                type="button"
+                role="radio"
+                aria-checked={modeFamily === family}
+                onClick={() => onModeFamilyChange(family)}
+                style={getRangeButtonStyle(modeFamily === family, false)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
       <div className="degree-selector-mode-buttons" style={headerStyle}>
-        <div style={rangeStyle}>
-          {chords.map((chord) => (
+        <div style={rangeWrapperStyle}>
+          <span style={modeLegendStyle}>Modo</span>
+          <div style={rangeStyle}>
+            {chords.map((chord) => (
+              <button
+                key={`degree-${chord.degree}`}
+                type="button"
+                aria-label={`Grado ${modeDegreeLabels[chord.degree - 1]}`}
+                aria-pressed={chord.degree === modeDegree}
+                title={modeDescriptions[chord.degree]}
+                onClick={() => onModeDegreeChange(chord.degree)}
+                style={getRangeButtonStyle(chord.degree === modeDegree, false)}
+              >
+                {modeDegreeLabels[chord.degree - 1]}
+              </button>
+            ))}
             <button
-              key={`degree-${chord.degree}`}
               type="button"
-              aria-label={`Grado ${modeDegreeLabels[chord.degree - 1]}`}
-              aria-pressed={chord.degree === modeDegree}
-              title={modeDescriptions[chord.degree]}
-              onClick={() => onModeDegreeChange(chord.degree)}
-              style={getRangeButtonStyle(chord.degree === modeDegree, false)}
+              onClick={handleLabelModeToggle}
+              style={toggleStyle}
+              aria-label={
+                activeLabelMode === 'roman'
+                  ? 'Cambiar a números Nashville'
+                  : 'Cambiar a numerales romanos'
+              }
             >
-              {modeDegreeLabels[chord.degree - 1]}
+              {activeLabelMode === 'roman' ? 'Numerales romanos' : 'Números Nashville'}
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={handleLabelModeToggle}
-            style={toggleStyle}
-            aria-label={
-              activeLabelMode === 'roman'
-                ? 'Cambiar a números Nashville'
-                : 'Cambiar a numerales romanos'
-            }
-          >
-            {activeLabelMode === 'roman' ? 'Numerales romanos' : 'Números Nashville'}
-          </button>
-      </div>
+          </div>
+        </div>
       </div>
 
       <div className="degree-selector-red-buttons" style={chordRowStyle}>
-        <div
-          role="radiogroup"
-          style={groupStyle}
-        >
-          {chords.map((chord) => {
+        <div style={rangeWrapperStyle}>
+          <span style={modeLegendStyle}>Grados Diatónicos</span>
+          <div
+            role="radiogroup"
+            style={groupStyle}
+          >
+            {chords.map((chord) => {
           const isSelected = chord.degree === value;
           const label = getDegreeLabel(chord.degree);
           const qualityLabel = extendedChords && chord.isExtended
@@ -165,7 +177,36 @@ export function DegreeSelector({
               </div>
             );
           })}
+          </div>
         </div>
+        <button
+          type="button"
+          onClick={onToggleMuted}
+          aria-pressed={!isMuted}
+          aria-label={isMuted ? 'Activar sonido' : 'Desactivar sonido'}
+          title={isMuted ? 'Sonido desactivado' : 'Sonido activado'}
+          className={isMuted ? 'audio-toggle audio-toggle-muted' : 'audio-toggle'}
+          style={{
+            minWidth: 140,
+            minHeight: 56,
+            flexShrink: 0,
+            alignSelf: 'center',
+            marginLeft: '8rem',
+            borderRadius: '999px',
+            border: 'none',
+            background: isMuted ? '#dc2626' : '#16a34a',
+            color: 'white',
+            fontSize: '1.3rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.5rem',
+          }}
+        >
+          {isMuted ? '🔇 Audio: Off' : '🔊 Audio: On'}
+        </button>
       </div>
       <div className="degree-selector-summary" style={selectionSummaryRowStyle}>
         <div style={selectionSummaryStyle} aria-label="Tonalidad actual">
@@ -214,6 +255,13 @@ const familyStyle: React.CSSProperties = {
   gap: '0.35rem',
 };
 
+const rangeWrapperStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  gap: '0.3rem',
+};
+
 const rangeStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -237,10 +285,11 @@ const getRangeButtonStyle = (isSelected: boolean, isDisabled: boolean): React.CS
   opacity: isDisabled ? 0.45 : 1,
 });
 
-const legendStyle: React.CSSProperties = {
-  fontSize: '0.8rem',
-  fontWeight: 600,
+const modeLegendStyle: React.CSSProperties = {
+  fontSize: '1.6rem',
+  fontWeight: 700,
   color: '#57534e',
+  flexShrink: 0,
 };
 
 const toggleStyle: React.CSSProperties = {
@@ -317,8 +366,8 @@ const playingChordLegendStyle: React.CSSProperties = {
 
 const groupStyle: React.CSSProperties = {
   display: 'flex',
-  flex: '1 1 auto',
-  width: '100%',
+  flex: '0 1 auto',
+  width: 'auto',
   maxWidth: '100%',
   minWidth: 0,
   gap: '0.4rem',

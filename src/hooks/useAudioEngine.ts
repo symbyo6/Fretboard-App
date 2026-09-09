@@ -6,12 +6,24 @@ import { audioEngine } from '../lib/audio/audioEngine';
 /** Hook ligero para reproducir notas, acordes y arpegios sueltos. */
 export function useAudioEngine() {
   const [isUnlocked, setIsUnlocked] = useState(audioEngine.isUnlocked);
+  const [isMuted, setIsMuted] = useState(audioEngine.isMuted);
 
   /** Debe llamarse desde un handler de click o touch. */
   const unlock = useCallback(async () => {
     await audioEngine.unlock();
     setIsUnlocked(true);
   }, []);
+
+  const setMuted = useCallback((muted: boolean) => {
+    audioEngine.setMuted(muted);
+    setIsMuted(muted);
+  }, []);
+
+  const toggleMuted = useCallback(async () => {
+    if (isMuted) await audioEngine.unlock();
+    setIsUnlocked(true);
+    setMuted(!isMuted);
+  }, [isMuted, setMuted]);
 
   const playNote = useCallback(
     async (noteName: string, durationSeconds?: number) => {
@@ -44,5 +56,15 @@ export function useAudioEngine() {
     audioEngine.stopAll();
   }, []);
 
-  return { isUnlocked, unlock, playNote, playChord, playArpeggio, stopAll };
+  return {
+    isUnlocked,
+    unlock,
+    isMuted,
+    setMuted,
+    toggleMuted,
+    playNote,
+    playChord,
+    playArpeggio,
+    stopAll,
+  };
 }

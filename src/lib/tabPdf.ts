@@ -92,6 +92,9 @@ export async function downloadFretboardPdf(
       details.stringGroup && `Cuerdas: ${details.stringGroup}`,
     ].filter(Boolean).join('  |  ');
     if (metadata) pdf.text(metadata, margin, margin + 20, { maxWidth: pageWidth - margin * 2 });
+    pdf.setFontSize(7);
+    pdf.setTextColor(120, 113, 108);
+    pdf.text('Creado por Juan Anderson', pageWidth - margin, margin + 26, { align: 'right' });
     pdf.addImage(pngDataUrl, 'PNG', x, y, width, height);
     const pdfBlob = pdf.output('blob');
     const downloadUrl = URL.createObjectURL(pdfBlob);
@@ -141,6 +144,9 @@ export function downloadTabPdf({ title, subtitle, steps }: TabPdfOptions): void 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(7);
     pdf.text(`Hexagrama de tablatura (6 cuerdas) · ${subtitle}`, margin, y);
+    pdf.setTextColor(120, 113, 108);
+    pdf.text('Creado por Juan Anderson', pageWidth - margin, y, { align: 'right' });
+    pdf.setTextColor(20);
     y += 7;
   };
 

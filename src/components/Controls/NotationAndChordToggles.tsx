@@ -156,11 +156,11 @@ const chordTypeGroupStyle: React.CSSProperties = {
 };
 
 const chordTypeButtonStyle: React.CSSProperties = {
-  minHeight: 40,
-  padding: '0 0.7rem',
+  minHeight: 58,
+  padding: '0 1.2rem',
   border: 'none',
   borderRight: '1px solid #d6d3d1',
-  fontSize: '0.82rem',
+  fontSize: '1.35rem',
   fontWeight: 700,
   cursor: 'pointer',
 };
@@ -168,56 +168,57 @@ const chordTypeButtonStyle: React.CSSProperties = {
 const notationIndicatorStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  minHeight: 40,
-  padding: '0 0.75rem',
+  minHeight: 58,
+  padding: '0 1.2rem',
   border: '1px solid #d6d3d1',
   borderRadius: '0.5rem',
   background: '#f8fafc',
   color: '#57534e',
-  fontSize: '0.85rem',
-  fontWeight: 600,
+  fontSize: '1.35rem',
+  fontWeight: 700,
 };
 
 const voicingLabelStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: '0.4rem',
-  minHeight: 44,
-  fontSize: '0.85rem',
-  fontWeight: 600,
+  gap: '0.5rem',
+  minHeight: 58,
+  fontSize: '1.35rem',
+  fontWeight: 700,
   color: '#57534e',
 };
 
 const voicingPositionsStyle: React.CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
-  gap: '0.3rem',
+  gap: '0.4rem',
 };
 
 const voicingPositionButtonStyle: React.CSSProperties = {
-  minWidth: 'clamp(30px, 8vw, 38px)',
-  minHeight: 'clamp(30px, 8vw, 38px)',
+  minWidth: 'clamp(50px, 10vw, 60px)',
+  minHeight: 'clamp(50px, 10vw, 60px)',
   border: '1px solid',
   borderRadius: '0.4rem',
+  fontSize: '1.35rem',
   fontWeight: 700,
   cursor: 'pointer',
 };
 
 const voicingStepButtonStyle: React.CSSProperties = {
-  minWidth: 'clamp(30px, 8vw, 38px)',
-  minHeight: 'clamp(30px, 8vw, 38px)',
+  minWidth: 'clamp(50px, 10vw, 60px)',
+  minHeight: 'clamp(50px, 10vw, 60px)',
   border: '1px solid #d6d3d1',
   borderRadius: '0.4rem',
   background: 'white',
   color: '#292524',
-  fontSize: 'clamp(0.85rem, 3vw, 1.1rem)',
+  fontSize: 'clamp(1.35rem, 4.2vw, 1.6rem)',
   fontWeight: 700,
   cursor: 'pointer',
 };
 
 const closedVoicingHintStyle: React.CSSProperties = {
   color: '#78716c',
-  fontSize: '0.78rem',
+  fontSize: '1.2rem',
   fontStyle: 'italic',
 };
 
@@ -231,19 +232,19 @@ const voicingTypeGroupStyle: React.CSSProperties = {
 };
 
 const voicingTypeLabelStyle: React.CSSProperties = {
-  padding: '0 0.6rem',
+  padding: '0 0.8rem',
   color: '#57534e',
-  fontSize: '0.8rem',
-  fontWeight: 600,
+  fontSize: '1.35rem',
+  fontWeight: 700,
   whiteSpace: 'nowrap',
 };
 
 const voicingTypeButtonStyle: React.CSSProperties = {
-  minHeight: 'clamp(32px, 8vw, 40px)',
-  padding: '0 clamp(0.35rem, 1.8vw, 0.7rem)',
+  minHeight: 'clamp(50px, 10vw, 60px)',
+  padding: '0 clamp(0.6rem, 2.4vw, 1.1rem)',
   border: 'none',
   borderRight: '1px solid #d6d3d1',
-  fontWeight: 600,
-  fontSize: 'clamp(0.62rem, 2.4vw, 0.85rem)',
+  fontWeight: 700,
+  fontSize: 'clamp(1.1rem, 3.6vw, 1.35rem)',
   cursor: 'pointer',
 };

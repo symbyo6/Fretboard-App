@@ -285,7 +285,7 @@ function getArpeggioPositions(
 
 function App(): JSX.Element {
   const appShellRef = useRef<HTMLElement>(null);
-  const { unlock, playNote, playChord } = useAudioEngine();
+  const { unlock, playNote, playChord, isMuted, toggleMuted } = useAudioEngine();
   const [key, setKey] = useState<KeyName>('C');
   const [modeBaseKey, setModeBaseKey] = useState<KeyName>('C');
   const [scaleId, setScaleId] = useState('ionian');
@@ -636,7 +636,7 @@ function App(): JSX.Element {
       handleVoicingChange(
         `${voicingType}-${nextPosition}` as ChordVoicing,
         getDrop3StringSet(drop3StringGroup),
-        isSequencePlaying,
+        !isSequencePlaying,
         isSequencePlaying,
         wrapsForward || wrapsBackward ? -Infinity : previousLowMidi,
         direction > 0,
@@ -651,7 +651,7 @@ function App(): JSX.Element {
     handleVoicingChange(
       `${voicingType}-${nextPosition}` as ChordVoicing,
       Array.from({ length: size }, (_, index) => lowerString - index),
-      isSequencePlaying,
+      !isSequencePlaying,
       isSequencePlaying,
       wrapsForward || wrapsBackward ? -Infinity : previousLowMidi,
       direction > 0,
@@ -780,6 +780,7 @@ function App(): JSX.Element {
         setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
         setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
         setPlayingChordLabel(selectedChord.symbol);
+        playChord(result.noteNames);
         scheduleChordHighlightClear();
       }
     }
@@ -896,6 +897,8 @@ function App(): JSX.Element {
           onVoicingTypeChange={setVoicingType}
           degreeLabelMode={degreeLabelMode}
           onDegreeLabelModeChange={setDegreeLabelMode}
+          isMuted={isMuted}
+          onToggleMuted={() => { void toggleMuted(); }}
         />
         {supportsChordFunctions && (
           <PlaybackControls
@@ -912,6 +915,31 @@ function App(): JSX.Element {
               setDrop3StringGroup(group);
               setLastChordLowStringMidi(null);
               setLastChordPositionKeys(null);
+              setLastChordVoiceMidis(null);
+              if (selectedChord) {
+                const nextStringSet = getDrop3StringSet(group);
+                const result = getArpeggioPositions(
+                  toVoicing(selectedChord, voicing),
+                  lowerString,
+                  upperString,
+                  nextStringSet,
+                  0,
+                  -Infinity,
+                  false,
+                  false,
+                  MAX_VOICING_FRET_SPAN,
+                  true,
+                  voicing.startsWith('drop3'),
+                  []
+                );
+                if (result) {
+                  setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
+                  setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
+                  setPlayingChordLabel(selectedChord.symbol);
+                  playChord(result.noteNames);
+                  scheduleChordHighlightClear();
+                }
+              }
             }}
             onPlayingChange={handleSequencePlayingChange}
             onUnlockAudio={unlock}
@@ -925,21 +953,6 @@ function App(): JSX.Element {
             }}
             sequenceDirection={sequenceDirection}
             onSequenceDirectionChange={setSequenceDirection}
-            onExportPdf={() => downloadTabPdf({
-              title: modeTitle,
-              subtitle: [
-                `Tipo: ${voicingType === 'closed' ? 'Cerrado' : voicingType === 'drop2' ? 'Drop 2' : 'Drop 3'}`,
-                `Inversión: ${voicing === 'closed' ? 1 : voicing.at(-1)}`,
-                `Grupo: ${voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup).join('-') : `${lowerString}-${upperString}`}`,
-                `Trastes: 0-24`,
-                `Acordes: ${extendedChords ? 'tétradas' : 'tríadas'}`,
-              ].join(' | '),
-              steps: progressionSteps.map((step) => ({
-                label: step.label ?? step.id,
-                chordName: chords.find((chord) => chord.romanLabel === step.label)?.symbol,
-                positions: step.positions,
-              })),
-            })}
             onStringRangeChange={handleStringGroupChange}
           />
         )}
@@ -949,7 +962,7 @@ function App(): JSX.Element {
           onVoicingChangeSilent={(nextVoicing) => handleVoicingChange(
             nextVoicing,
             undefined,
-            isSequencePlaying,
+            !isSequencePlaying,
             isSequencePlaying
           )}
           onInversionStep={handleInversionStep}
@@ -981,7 +994,29 @@ function App(): JSX.Element {
               ? getDrop3StringSet(drop3StringGroup).join('-')
               : `${lowerString}-${upperString}`,
           }}
-          onNotePlay={(position) => playNote(fretToNoteName(position.string - 1, position.fret))}
+          onNotePlay={(position) => {
+            playNote(fretToNoteName(position.string - 1, position.fret));
+            setPlayingChordLabel(null);
+            setLastChordPositionKeys([`${position.string}-${position.fret}`]);
+            scheduleChordHighlightClear();
+          }}
+          hasSequenceSteps={progressionSteps.length > 0}
+          isSequencePlaying={isSequencePlaying}
+          onExportSequencePdf={supportsChordFunctions ? () => downloadTabPdf({
+            title: modeTitle,
+            subtitle: [
+              `Tipo: ${voicingType === 'closed' ? 'Cerrado' : voicingType === 'drop2' ? 'Drop 2' : 'Drop 3'}`,
+              `Inversión: ${voicing === 'closed' ? 1 : voicing.at(-1)}`,
+              `Grupo: ${voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup).join('-') : `${lowerString}-${upperString}`}`,
+              `Trastes: 0-24`,
+              `Acordes: ${extendedChords ? 'tétradas' : 'tríadas'}`,
+            ].join(' | '),
+            steps: progressionSteps.map((step) => ({
+              label: step.label ?? step.id,
+              chordName: chords.find((chord) => chord.romanLabel === step.label)?.symbol,
+              positions: step.positions,
+            })),
+          }) : undefined}
         />
       </section>
     </main>

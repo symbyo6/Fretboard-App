@@ -10,9 +10,21 @@ class AudioEngine {
   private synth: Tone.PolySynth<Tone.Synth> | null = null;
   private reverb: Tone.Reverb | null = null;
   private isUnlockedFlag = false;
+  private isMutedFlag = false;
+  private volumeDb = -6;
 
   get isUnlocked(): boolean {
     return this.isUnlockedFlag;
+  }
+
+  get isMuted(): boolean {
+    return this.isMutedFlag;
+  }
+
+  /** Activa o desactiva el sonido sin perder el estado del sintetizador. */
+  setMuted(muted: boolean): void {
+    this.isMutedFlag = muted;
+    if (this.synth) this.synth.volume.value = muted ? -Infinity : this.volumeDb;
   }
 
   /** Desbloquea el AudioContext y construye el grafo de síntesis. */
@@ -42,13 +54,13 @@ class AudioEngine {
 
   /** Toca una sola nota. */
   playNote(noteName: string, durationSeconds = 0.8, velocity = 0.85): void {
-    if (!this.synth) return;
+    if (!this.synth || this.isMutedFlag) return;
     this.synth.triggerAttackRelease(noteName, durationSeconds, undefined, velocity);
   }
 
   /** Toca un conjunto de notas simultáneamente. */
   playChord(noteNames: string[], durationSeconds = 1.4, velocity = 0.75): void {
-    if (!this.synth || noteNames.length === 0) return;
+    if (!this.synth || this.isMutedFlag || noteNames.length === 0) return;
     this.synth.triggerAttackRelease(noteNames, durationSeconds, undefined, velocity);
   }
 
@@ -60,7 +72,7 @@ class AudioEngine {
     onNoteStart?: (index: number) => void,
     startTime = Tone.now()
   ): void {
-    if (!this.synth || noteNames.length === 0) return;
+    if (!this.synth || this.isMutedFlag || noteNames.length === 0) return;
 
     noteNames.forEach((note, index) => {
       this.synth!.triggerAttackRelease(

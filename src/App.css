@@ -125,6 +125,19 @@ h1 {
   line-height: 1.15;
 }
 
+.audio-toggle-muted {
+  animation: audio-toggle-blink 1s ease-in-out infinite;
+}
+
+@keyframes audio-toggle-blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
 .parent-scale-indicator {
   color: #78716c;
   font-size: 1.1rem;
