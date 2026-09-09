@@ -67,7 +67,7 @@ export function useProgression(
     setCurrentIndex(null);
     onStepChange?.(null);
     onNoteChange?.(null);
-  }, [onNoteChange, onStepChange]);
+  }, [onNoteChange, onPlayingChange, onStepChange]);
 
   const play = useCallback(async () => {
     if (steps.length === 0) return;

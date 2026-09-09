@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState, type JSX } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import * as Tone from 'tone';
 import { ControlsPanel } from './components/Controls/ControlsPanel';
 import { PlaybackControls } from './components/Controls/PlaybackControls';
@@ -8,7 +8,7 @@ import { getAllDiatonicChords, getChordToneSet, getScaleToneSet, toVoicing, type
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { fretToNoteName } from './lib/audio/tuning';
 import { getAllPositionsForPitch } from './lib/theory/fretboardPositions';
-import { getMajorDegreePentatonic, getNoteName, getScaleById, resolveScale } from './lib/theory/scales';
+import { getMajorDegreePentatonic, getScaleById, resolveScale } from './lib/theory/scales';
 import { downloadTabPdf } from './lib/tabPdf';
 import type { ProgressionStep, SequenceDirection } from './hooks/useProgression';
 import type {
@@ -372,7 +372,7 @@ function App(): JSX.Element {
         return [index + 1, `${getPreferredKeyName(modeRoot, modeFamily)} ${modeName}`];
       })
     );
-  }, [modeBaseScale, modeFamilyIds]);
+  }, [modeBaseScale, modeFamilyIds, modeFamily]);
   const supportsChordFunctions = true;
   const chords = useMemo(
     () => getAllDiatonicChords(
@@ -394,25 +394,6 @@ function App(): JSX.Element {
   const activeStringSet = voicingType === 'drop3'
     ? getDrop3StringSet(drop3StringGroup)
     : undefined;
-  const selectedVoicingResult = useMemo(
-    () => selectedChord
-      ? getArpeggioPositions(
-        toVoicing(selectedChord, voicing),
-        lowerString,
-        upperString,
-        activeStringSet,
-        0,
-        -Infinity,
-        false,
-        false,
-        MAX_VOICING_FRET_SPAN,
-        sequenceDirection === 'ascending',
-        voicing.startsWith('drop3'),
-        []
-      )
-      : null,
-    [activeStringSet, lowerString, selectedChord, sequenceDirection, upperString, voicing]
-  );
   const chordInfo = chords.map((chord) => ({
     degree: chord.degree,
     romanNumeral: chord.romanLabel,
@@ -544,7 +525,7 @@ function App(): JSX.Element {
     return activeStep?.positions ?? [];
   }, [activeStepIndex, lastChordPositionKeys, progressionSteps]);
 
-  const scheduleChordHighlightClear = () => {
+  const scheduleChordHighlightClear = useCallback(() => {
     if (chordHighlightTimerRef.current !== null) {
       window.clearTimeout(chordHighlightTimerRef.current);
     }
@@ -554,9 +535,9 @@ function App(): JSX.Element {
       setPlayingChordLabel(null);
       chordHighlightTimerRef.current = null;
     }, 1500);
-  };
+  }, [keepLastPlayed]);
 
-  const handleVoicingChange = (
+  const handleVoicingChange = useCallback((
     nextVoicing: ChordVoicing,
     stringSetOverride?: number[],
     playSound = true,
@@ -601,7 +582,7 @@ function App(): JSX.Element {
         scheduleChordHighlightClear();
       }
     }
-  };
+  }, [drop3StringGroup, lowerString, playChord, scheduleChordHighlightClear, selectedChord, upperString]);
 
   const handleInversionStep = (direction: 1 | -1) => {
     const currentPosition = voicing === 'closed' ? 1 : Number(voicing.at(-1));
@@ -727,7 +708,7 @@ function App(): JSX.Element {
     }
   };
 
-  const handleStepChange = (index: number | null) => {
+  const handleStepChange = useCallback((index: number | null) => {
     setActiveStepIndex(index);
     if (index !== null && playbackChords[index]) {
       setDegree(playbackChords[index].chord.degree);
@@ -735,9 +716,9 @@ function App(): JSX.Element {
     } else {
       setPlayingChordLabel(null);
     }
-  };
+  }, [playbackChords]);
 
-  const handleSequencePlayingChange = (isPlaying: boolean) => {
+  const handleSequencePlayingChange = useCallback((isPlaying: boolean) => {
     setIsSequencePlaying(isPlaying);
     if (isPlaying) {
       setLastChordPositionKeys(null);
@@ -751,7 +732,60 @@ function App(): JSX.Element {
         setPlayingChordLabel(null);
       }
     }
-  };
+  }, [keepLastPlayed]);
+
+  const handleDrop3StringGroupChange = useCallback((group: number) => {
+    setDrop3StringGroup(group);
+    setLastChordLowStringMidi(null);
+    setLastChordPositionKeys(null);
+    setLastChordVoiceMidis(null);
+    if (selectedChord) {
+      const nextStringSet = getDrop3StringSet(group);
+      const result = getArpeggioPositions(
+        toVoicing(selectedChord, voicing),
+        lowerString,
+        upperString,
+        nextStringSet,
+        0,
+        -Infinity,
+        false,
+        false,
+        MAX_VOICING_FRET_SPAN,
+        true,
+        voicing.startsWith('drop3'),
+        []
+      );
+      if (result) {
+        setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
+        setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
+        setPlayingChordLabel(selectedChord.symbol);
+        playChord(result.noteNames);
+        scheduleChordHighlightClear();
+      }
+    }
+  }, [lowerString, playChord, scheduleChordHighlightClear, selectedChord, upperString, voicing]);
+
+  const handleKeepLastPlayedChange = useCallback((keep: boolean) => {
+    setKeepLastPlayed(keep);
+    if (!keep) {
+      setLastChordPositionKeys(null);
+      setPlayingChordLabel(null);
+    }
+  }, []);
+
+  const handleVoicingChangeSilent = useCallback((nextVoicing: ChordVoicing) => handleVoicingChange(
+    nextVoicing,
+    undefined,
+    !isSequencePlaying,
+    isSequencePlaying
+  ), [handleVoicingChange, isSequencePlaying]);
+
+  const handleNotePlay = useCallback((position: FretboardPosition) => {
+    playNote(fretToNoteName(position.string - 1, position.fret));
+    setPlayingChordLabel(null);
+    setLastChordPositionKeys([`${position.string}-${position.fret}`]);
+    scheduleChordHighlightClear();
+  }, [playNote, scheduleChordHighlightClear]);
 
   const handleStringGroupChange = (nextLowerString: number, nextUpperString: number) => {
     setLastChordLowStringMidi(null);
@@ -827,6 +861,45 @@ function App(): JSX.Element {
     ? 'Escala'
     : 'Modo';
 
+  const pdfDetails = useMemo(() => ({
+    title: `${modeTitle} - Diapasón`,
+    key: modeBaseKey,
+    scale: modeBaseScale.scaleName,
+    mode: getScaleById(scaleId)?.name ?? scale.scaleName,
+    chord: selectedChord?.symbol,
+    chordType: extendedChords ? 'Tétrada (7)' : 'Tríada',
+    inversion: String(voicing === 'closed' ? 1 : voicing.at(-1)),
+    voicing: voicing === 'closed' ? 'Cerrado' : voicing,
+    stringGroup: voicingType === 'drop3'
+      ? getDrop3StringSet(drop3StringGroup).join('-')
+      : `${lowerString}-${upperString}`,
+  }), [
+    drop3StringGroup, extendedChords, lowerString, modeBaseKey, modeBaseScale.scaleName,
+    modeTitle, scale.scaleName, scaleId, selectedChord, upperString, voicing, voicingType,
+  ]);
+
+  const onExportSequencePdf = useMemo(() => {
+    if (!supportsChordFunctions) return undefined;
+    return () => downloadTabPdf({
+      title: modeTitle,
+      subtitle: [
+        `Tipo: ${voicingType === 'closed' ? 'Cerrado' : voicingType === 'drop2' ? 'Drop 2' : 'Drop 3'}`,
+        `Inversión: ${voicing === 'closed' ? 1 : voicing.at(-1)}`,
+        `Grupo: ${voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup).join('-') : `${lowerString}-${upperString}`}`,
+        `Trastes: 0-24`,
+        `Acordes: ${extendedChords ? 'tétradas' : 'tríadas'}`,
+      ].join(' | '),
+      steps: progressionSteps.map((step) => ({
+        label: step.label ?? step.id,
+        chordName: chords.find((chord) => chord.romanLabel === step.label)?.symbol,
+        positions: step.positions,
+      })),
+    });
+  }, [
+    chords, drop3StringGroup, extendedChords, lowerString, modeTitle,
+    progressionSteps, supportsChordFunctions, upperString, voicing, voicingType,
+  ]);
+
   return (
     <main ref={appShellRef} className="app-shell">
       <section className="phase-one">
@@ -890,11 +963,6 @@ function App(): JSX.Element {
           notation={effectiveNotation}
           notationLabel={signatureLabel}
           extendedChords={extendedChords}
-          onExtendedChordsChange={handleExtendedChordsChange}
-          voicing={voicing}
-          onVoicingChange={handleVoicingChange}
-          voicingType={voicingType}
-          onVoicingTypeChange={setVoicingType}
           degreeLabelMode={degreeLabelMode}
           onDegreeLabelModeChange={setDegreeLabelMode}
           isMuted={isMuted}
@@ -911,46 +979,11 @@ function App(): JSX.Element {
             extendedChords={extendedChords}
             voicingType={voicingType}
             drop3StringGroup={drop3StringGroup}
-            onDrop3StringGroupChange={(group) => {
-              setDrop3StringGroup(group);
-              setLastChordLowStringMidi(null);
-              setLastChordPositionKeys(null);
-              setLastChordVoiceMidis(null);
-              if (selectedChord) {
-                const nextStringSet = getDrop3StringSet(group);
-                const result = getArpeggioPositions(
-                  toVoicing(selectedChord, voicing),
-                  lowerString,
-                  upperString,
-                  nextStringSet,
-                  0,
-                  -Infinity,
-                  false,
-                  false,
-                  MAX_VOICING_FRET_SPAN,
-                  true,
-                  voicing.startsWith('drop3'),
-                  []
-                );
-                if (result) {
-                  setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
-                  setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-                  setPlayingChordLabel(selectedChord.symbol);
-                  playChord(result.noteNames);
-                  scheduleChordHighlightClear();
-                }
-              }
-            }}
+            onDrop3StringGroupChange={handleDrop3StringGroupChange}
             onPlayingChange={handleSequencePlayingChange}
             onUnlockAudio={unlock}
             keepLastPlayed={keepLastPlayed}
-            onKeepLastPlayedChange={(keep) => {
-              setKeepLastPlayed(keep);
-              if (!keep) {
-                setLastChordPositionKeys(null);
-                setPlayingChordLabel(null);
-              }
-            }}
+            onKeepLastPlayedChange={handleKeepLastPlayedChange}
             sequenceDirection={sequenceDirection}
             onSequenceDirectionChange={setSequenceDirection}
             onStringRangeChange={handleStringGroupChange}
@@ -959,12 +992,7 @@ function App(): JSX.Element {
         <InversionControls
           voicing={voicing}
           onVoicingChange={handleVoicingChange}
-          onVoicingChangeSilent={(nextVoicing) => handleVoicingChange(
-            nextVoicing,
-            undefined,
-            !isSequencePlaying,
-            isSequencePlaying
-          )}
+          onVoicingChangeSilent={handleVoicingChangeSilent}
           onInversionStep={handleInversionStep}
           voicingType={voicingType}
           onVoicingTypeChange={setVoicingType}
@@ -981,42 +1009,11 @@ function App(): JSX.Element {
           chordToneSet={chordToneSet}
           notation={effectiveNotation}
           highlightedPositions={highlightedPositions}
-          pdfDetails={{
-            title: `${modeTitle} - Diapasón`,
-            key: modeBaseKey,
-            scale: modeBaseScale.scaleName,
-            mode: getScaleById(scaleId)?.name ?? scale.scaleName,
-            chord: selectedChord?.symbol,
-            chordType: extendedChords ? 'Tétrada (7)' : 'Tríada',
-            inversion: String(voicing === 'closed' ? 1 : voicing.at(-1)),
-            voicing: voicing === 'closed' ? 'Cerrado' : voicing,
-            stringGroup: voicingType === 'drop3'
-              ? getDrop3StringSet(drop3StringGroup).join('-')
-              : `${lowerString}-${upperString}`,
-          }}
-          onNotePlay={(position) => {
-            playNote(fretToNoteName(position.string - 1, position.fret));
-            setPlayingChordLabel(null);
-            setLastChordPositionKeys([`${position.string}-${position.fret}`]);
-            scheduleChordHighlightClear();
-          }}
+          pdfDetails={pdfDetails}
+          onNotePlay={handleNotePlay}
           hasSequenceSteps={progressionSteps.length > 0}
           isSequencePlaying={isSequencePlaying}
-          onExportSequencePdf={supportsChordFunctions ? () => downloadTabPdf({
-            title: modeTitle,
-            subtitle: [
-              `Tipo: ${voicingType === 'closed' ? 'Cerrado' : voicingType === 'drop2' ? 'Drop 2' : 'Drop 3'}`,
-              `Inversión: ${voicing === 'closed' ? 1 : voicing.at(-1)}`,
-              `Grupo: ${voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup).join('-') : `${lowerString}-${upperString}`}`,
-              `Trastes: 0-24`,
-              `Acordes: ${extendedChords ? 'tétradas' : 'tríadas'}`,
-            ].join(' | '),
-            steps: progressionSteps.map((step) => ({
-              label: step.label ?? step.id,
-              chordName: chords.find((chord) => chord.romanLabel === step.label)?.symbol,
-              positions: step.positions,
-            })),
-          }) : undefined}
+          onExportSequencePdf={onExportSequencePdf}
         />
       </section>
     </main>

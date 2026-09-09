@@ -13,7 +13,6 @@ import { ScaleSelector } from './ScaleSelector';
 import { DegreeSelector } from './DegreeSelector';
 import { NotationAndChordToggles } from './NotationAndChordToggles';
 import { getNoteName, getScaleById } from '../../lib/theory/scales';
-import type { ChordVoicing, ChordVoicingType } from '../../lib/theory/chords';
 
 export interface ControlsPanelProps {
   rootPitch: PitchClass;
@@ -37,11 +36,6 @@ export interface ControlsPanelProps {
   notation: NotationPreference;
   notationLabel: 'flats' | 'sharps' | 'none';
   extendedChords: boolean;
-  onExtendedChordsChange: (value: boolean) => void;
-  voicing: ChordVoicing;
-  onVoicingChange: (value: ChordVoicing) => void;
-  voicingType: ChordVoicingType;
-  onVoicingTypeChange: (value: ChordVoicingType) => void;
   degreeLabelMode: DegreeLabelMode;
   onDegreeLabelModeChange: (mode: DegreeLabelMode) => void;
   isMuted: boolean;
@@ -86,11 +80,6 @@ export function ControlsPanel({
   notation,
   notationLabel,
   extendedChords,
-  onExtendedChordsChange,
-  voicing,
-  onVoicingChange,
-  voicingType,
-  onVoicingTypeChange,
   degreeLabelMode,
   onDegreeLabelModeChange,
   isMuted,
@@ -157,14 +146,7 @@ export function ControlsPanel({
           <ScaleSelector value={scaleId} onChange={onScaleIdChange} />
 
           <NotationAndChordToggles
-            notation={notation}
             notationLabel={notationLabel}
-            extendedChords={extendedChords}
-            onExtendedChordsChange={onExtendedChordsChange}
-            voicing={voicing}
-            onVoicingChange={onVoicingChange}
-            voicingType={voicingType}
-            onVoicingTypeChange={onVoicingTypeChange}
           />
 
           {showChordFunctions && (

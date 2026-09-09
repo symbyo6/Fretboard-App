@@ -59,7 +59,7 @@ interface FretboardProps {
   layoutConfig?: Partial<FretboardLayoutConfig>;
   onNotePlay?: (position: FretboardPosition, pitch: PitchClass) => void;
   pdfDetails?: FretboardPdfDetails;
-  onExportSequencePdf?: () => void;
+  onExportSequencePdf?: () => void | Promise<void>;
   hasSequenceSteps?: boolean;
   isSequencePlaying?: boolean;
   children?: (ctx: {

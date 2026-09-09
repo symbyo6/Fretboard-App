@@ -1,18 +1,10 @@
 // src/components/Controls/NotationAndChordToggles.tsx
 
 import React from 'react';
-import type { NotationPreference } from '../../types';
 import type { ChordVoicing, ChordVoicingType } from '../../lib/theory/chords';
 
 interface NotationAndChordTogglesProps {
-  notation: NotationPreference;
   notationLabel: 'flats' | 'sharps' | 'none';
-  extendedChords: boolean;
-  onExtendedChordsChange: (value: boolean) => void;
-  voicing: ChordVoicing;
-  onVoicingChange: (value: ChordVoicing) => void;
-  voicingType: ChordVoicingType;
-  onVoicingTypeChange: (value: ChordVoicingType) => void;
 }
 
 export interface InversionControlsProps {
@@ -28,14 +20,7 @@ export interface InversionControlsProps {
 
 /** Controles compactos para notación y acordes extendidos. */
 export function NotationAndChordToggles({
-  notation,
   notationLabel,
-  extendedChords,
-  onExtendedChordsChange,
-  voicing,
-  onVoicingChange,
-  voicingType,
-  onVoicingTypeChange,
 }: NotationAndChordTogglesProps): JSX.Element {
   return (
     <div
@@ -214,12 +199,6 @@ const voicingStepButtonStyle: React.CSSProperties = {
   fontSize: 'clamp(1.35rem, 4.2vw, 1.6rem)',
   fontWeight: 700,
   cursor: 'pointer',
-};
-
-const closedVoicingHintStyle: React.CSSProperties = {
-  color: '#78716c',
-  fontSize: '1.2rem',
-  fontStyle: 'italic',
 };
 
 const voicingTypeGroupStyle: React.CSSProperties = {

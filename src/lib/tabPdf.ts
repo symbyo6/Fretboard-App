@@ -1,5 +1,3 @@
-import { jsPDF } from 'jspdf';
-
 export interface FretboardPdfDetails {
   title?: string;
   scale?: string;
@@ -24,6 +22,7 @@ export async function downloadFretboardPdf(
   details: FretboardPdfDetails = {},
   viewBox?: FretboardPdfViewBox
 ): Promise<void> {
+  const { jsPDF } = await import('jspdf');
   const serializer = new XMLSerializer();
   const exportSvg = viewBox ? svg.cloneNode(true) as SVGSVGElement : svg;
   if (viewBox) {
@@ -123,7 +122,8 @@ interface TabPdfOptions {
 }
 
 /** Exporta un hexagrama de tablatura monocromo: seis líneas, una por cuerda. */
-export function downloadTabPdf({ title, subtitle, steps }: TabPdfOptions): void {
+export async function downloadTabPdf({ title, subtitle, steps }: TabPdfOptions): Promise<void> {
+  const { jsPDF } = await import('jspdf');
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
   const margin = 12;
   const pageWidth = pdf.internal.pageSize.getWidth();
@@ -150,7 +150,7 @@ export function downloadTabPdf({ title, subtitle, steps }: TabPdfOptions): void 
     y += 7;
   };
 
-  const drawSystem = (systemSteps: TabPdfStep[], startIndex: number) => {
+  const drawSystem = (systemSteps: TabPdfStep[]) => {
     if (y + systemHeight > pageHeight - margin) {
       pdf.addPage();
       y = margin;
@@ -187,7 +187,7 @@ export function downloadTabPdf({ title, subtitle, steps }: TabPdfOptions): void 
 
   drawHeader();
   for (let index = 0; index < steps.length; index += columnsPerSystem) {
-    drawSystem(steps.slice(index, index + columnsPerSystem), index);
+    drawSystem(steps.slice(index, index + columnsPerSystem));
   }
   pdf.save('tablatura-secuencia.pdf');
 }
