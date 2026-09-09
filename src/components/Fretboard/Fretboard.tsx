@@ -458,7 +458,7 @@ export function Fretboard({
             const isPlayedFundamentalRoot = isHighlighted && isFundamentalRoot;
             const style = isPlayedFundamentalRoot
               ? CATEGORY_STYLES.root
-              : isSecondaryRoot || isModeRootGreen
+              : isSecondaryRoot
                 ? SECONDARY_ROOT_STYLE
                 : CATEGORY_STYLES[category];
             const noteFill = isMutedRoot ? '#cbd5e1' : style.fill;
