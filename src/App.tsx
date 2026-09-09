@@ -820,6 +820,43 @@ function App(): JSX.Element {
     }
   };
 
+  const currentChordPositions = useMemo(() => {
+    if (!lastChordPositionKeys) return null;
+    return lastChordPositionKeys.map((key) => {
+      const [string, fret] = key.split('-').map(Number);
+      return { string, fret };
+    });
+  }, [lastChordPositionKeys]);
+
+  const canShiftOctave = useCallback((direction: 1 | -1) => {
+    if (!currentChordPositions || currentChordPositions.length === 0) return false;
+    return currentChordPositions.every((position) => {
+      const nextFret = position.fret + direction * 12;
+      return nextFret >= 0 && nextFret <= MAX_FRETBOARD_FRET;
+    });
+  }, [currentChordPositions]);
+
+  const canOctaveUp = canShiftOctave(1);
+  const canOctaveDown = canShiftOctave(-1);
+
+  const handleOctaveStep = useCallback((direction: 1 | -1) => {
+    if (!currentChordPositions || currentChordPositions.length === 0) return;
+    const shiftedPositions = currentChordPositions.map((position) => ({
+      string: position.string,
+      fret: position.fret + direction * 12,
+    }));
+    if (shiftedPositions.some((position) => position.fret < 0 || position.fret > MAX_FRETBOARD_FRET)) {
+      return;
+    }
+
+    const noteNames = shiftedPositions.map((position) => fretToNoteName(position.string - 1, position.fret));
+    setLastChordPositionKeys(shiftedPositions.map((position) => `${position.string}-${position.fret}`));
+    setLastChordVoiceMidis(noteNames.map((note) => Tone.Frequency(note).toMidi()));
+    setLastChordLowStringMidi(Tone.Frequency(noteNames[0]).toMidi());
+    playChord(noteNames);
+    scheduleChordHighlightClear();
+  }, [currentChordPositions, playChord, scheduleChordHighlightClear]);
+
   const handleDegreeChange = (nextDegree: number) => {
     if (nextDegree < 1 || nextDegree > 7) {
       setDegree(nextDegree);
@@ -998,6 +1035,9 @@ function App(): JSX.Element {
           onVoicingTypeChange={setVoicingType}
           extendedChords={extendedChords}
           onExtendedChordsChange={handleExtendedChordsChange}
+          onOctaveStep={handleOctaveStep}
+          canOctaveUp={canOctaveUp}
+          canOctaveDown={canOctaveDown}
         />
         <h2>Diapasón</h2>
         <Fretboard

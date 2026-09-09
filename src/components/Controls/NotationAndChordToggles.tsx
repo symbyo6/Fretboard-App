@@ -16,6 +16,9 @@ export interface InversionControlsProps {
   onVoicingTypeChange: (value: ChordVoicingType) => void;
   extendedChords: boolean;
   onExtendedChordsChange: (value: boolean) => void;
+  onOctaveStep?: (direction: 1 | -1) => void;
+  canOctaveUp?: boolean;
+  canOctaveDown?: boolean;
 }
 
 /** Controles compactos para notación y acordes extendidos. */
@@ -55,6 +58,9 @@ export function InversionControls({
   onVoicingTypeChange,
   extendedChords,
   onExtendedChordsChange,
+  onOctaveStep,
+  canOctaveUp = true,
+  canOctaveDown = true,
 }: InversionControlsProps): JSX.Element {
   const voicingNumber = voicing === 'closed' ? 1 : Number(voicing.at(-1));
   const inversionCount = extendedChords ? 4 : 3;
@@ -121,6 +127,27 @@ export function InversionControls({
           </button>
         ))}
         <button type="button" aria-label="Bajar a la inversión anterior" onClick={() => onInversionStep?.(-1)} style={voicingStepButtonStyle}>↓</button>
+      </div>
+      <div role="group" aria-label="Cambiar octava de la inversión" style={voicingPositionsStyle}>
+        <span style={voicingLabelStyle}>Octava</span>
+        <button
+          type="button"
+          aria-label="Subir una octava"
+          onClick={() => onOctaveStep?.(1)}
+          disabled={!canOctaveUp}
+          style={{ ...voicingStepButtonStyle, opacity: canOctaveUp ? 1 : 0.5, cursor: canOctaveUp ? 'pointer' : 'not-allowed' }}
+        >
+          ↑8
+        </button>
+        <button
+          type="button"
+          aria-label="Bajar una octava"
+          onClick={() => onOctaveStep?.(-1)}
+          disabled={!canOctaveDown}
+          style={{ ...voicingStepButtonStyle, opacity: canOctaveDown ? 1 : 0.5, cursor: canOctaveDown ? 'pointer' : 'not-allowed' }}
+        >
+          ↓8
+        </button>
       </div>
     </div>
   );
