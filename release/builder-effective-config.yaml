@@ -1,0 +1,24 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.juananderson.fretboard
+productName: Fretboard App
+asar: true
+files:
+  - filter:
+      - dist/**/*
+      - electron/**/*
+      - package.json
+win:
+  target:
+    - portable
+    - nsis
+  artifactName: Fretboard-App-${version}-${arch}.${ext}
+portable:
+  artifactName: Fretboard-App-${version}-portable.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: Fretboard App
+electronVersion: 44.3.0

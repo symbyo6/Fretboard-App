@@ -7,6 +7,8 @@ import {
   type PlaybackMode,
   type SequenceDirection,
 } from '../../hooks/useProgression';
+import { useAudioEngine } from '../../hooks/useAudioEngine';
+import { useLanguage } from '../../i18n';
 
 interface PlaybackControlsProps {
   steps: ProgressionStep[];
@@ -25,6 +27,11 @@ interface PlaybackControlsProps {
   onKeepLastPlayedChange: (keep: boolean) => void;
   sequenceDirection: SequenceDirection;
   onSequenceDirectionChange: (direction: SequenceDirection) => void;
+  bpm: number;
+  onBpmChange: (bpm: number) => void;
+  playbackMode: PlaybackMode;
+  onPlaybackModeChange: (mode: PlaybackMode) => void;
+  displayStringGroup?: string;
   label?: string;
 }
 
@@ -46,18 +53,30 @@ export function PlaybackControls({
   onKeepLastPlayedChange,
   sequenceDirection,
   onSequenceDirectionChange,
+  bpm,
+  onBpmChange,
+  playbackMode,
+  onPlaybackModeChange,
+  displayStringGroup,
   label = 'Progresión',
 }: PlaybackControlsProps): JSX.Element {
-  const [bpm, setBpm] = useState(90);
-  const [mode, setMode] = useState<PlaybackMode>('chord');
+  const { t } = useLanguage();
+  const { playPreviewChord, stopAll } = useAudioEngine();
   const [audioError, setAudioError] = useState(false);
+  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null);
+  const mode = playbackMode;
   const direction = sequenceDirection;
+
+  const handleStepChange = (index: number | null) => {
+    setSelectedStepIndex(index);
+    onStepChange?.(index);
+  };
 
   const { isPlaying, currentIndex, play, stop } = useProgression(steps, {
     bpm,
     mode,
     direction,
-    onStepChange,
+    onStepChange: handleStepChange,
     onNoteChange,
     onPlayingChange,
     onPlaybackError: () => setAudioError(true),
@@ -98,7 +117,7 @@ export function PlaybackControls({
           <button
             type="button"
             onClick={() => { void handleUnlockAudio(); }}
-            aria-label="Error de audio"
+            aria-label={t('audioOff')}
             style={{ ...audioButtonStyle, ...audioErrorButtonStyle }}
           >
             Reintentar sonido
@@ -121,17 +140,17 @@ export function PlaybackControls({
             cursor: hasSteps ? 'pointer' : 'not-allowed',
           }}
         >
-          {isPlaying ? 'Detener' : 'Reproducir'}
+          {isPlaying ? t('stop') : t('play')}
         </button>
 
-        <div role="group" aria-label="Modo y dirección de reproducción" style={modeGroupStyle}>
+        <div role="group" aria-label={`${t('play')} / ${t('ascending')}`} style={modeGroupStyle}>
           <button
             type="button"
-            onClick={() => setMode('chord')}
+            onClick={() => onPlaybackModeChange('chord')}
             disabled={isPlaying}
             style={getModeButtonStyle(mode === 'chord', isPlaying)}
           >
-            Bloque
+            {t('block')}
           </button>
           <button
             type="button"
@@ -139,7 +158,7 @@ export function PlaybackControls({
               const nextDirection = direction === 'ascending' ? 'descending' : 'ascending';
               onSequenceDirectionChange(nextDirection);
               if (mode !== 'chord') {
-                setMode(nextDirection === 'ascending' ? 'arpeggio-up' : 'arpeggio-down');
+                onPlaybackModeChange(nextDirection === 'ascending' ? 'arpeggio-up' : 'arpeggio-down');
               }
             }}
             disabled={isPlaying}
@@ -151,22 +170,22 @@ export function PlaybackControls({
               : 'Cambiar a arpegio ascendente'}
             style={getModeButtonStyle(mode !== 'chord', isPlaying)}
           >
-            {direction === 'ascending' ? '↑ Ascendente' : '↓ Descendente'}
+            {direction === 'ascending' ? `↑ ${t('ascending')}` : `↓ ${t('descending')}`}
           </button>
         </div>
-        <label style={keepLastPlayedStyle}>
+          <label style={keepLastPlayedStyle}>
           <input
             type="checkbox"
             checked={keepLastPlayed}
             onChange={(event) => onKeepLastPlayedChange(event.target.checked)}
           />
-          Mantener último tab
+          {t('keepLastTab')}
         </label>
       </div>
 
       <div style={tempoRowStyle}>
         <label htmlFor="bpm-slider" style={tempoLabelStyle}>
-          Tempo: <strong>{bpm}</strong> BPM
+          {t('tempo')}: <strong>{bpm}</strong> BPM
         </label>
         <input
           id="bpm-slider"
@@ -175,18 +194,20 @@ export function PlaybackControls({
           max={200}
           step={2}
           value={bpm}
-          onChange={(event) => setBpm(Number(event.target.value))}
+          onChange={(event) => onBpmChange(Number(event.target.value))}
           disabled={isPlaying}
           style={{ flex: 1, minHeight: 56 }}
         />
       </div>
 
       <div style={stringGroupsRowStyle} aria-label="Grupos de cuerdas">
-        <span style={tempoLabelStyle}>Grupos</span>
+        <span style={tempoLabelStyle}>{t('groups')}</span>
         {stringGroups.map((group) => {
-          const isSelected = voicingType === 'drop3'
-            ? drop3StringGroup === group.id
-            : lowerString === group.lower && upperString === group.upper;
+          const isSelected = displayStringGroup
+            ? displayStringGroup === `${group.lower}-${group.upper}`
+            : voicingType === 'drop3'
+              ? drop3StringGroup === group.id
+              : lowerString === group.lower && upperString === group.upper;
 
           return (
             <button
@@ -216,11 +237,20 @@ export function PlaybackControls({
       {hasSteps && (
         <div style={stepsStyle}>
           {steps.map((step, index) => {
-            const isActive = currentIndex === index;
+            const isActive = (currentIndex ?? selectedStepIndex) === index;
 
             return (
-              <div
+              <button
                 key={step.id}
+                type="button"
+                onClick={() => {
+                  stopAll();
+                  setSelectedStepIndex(index);
+                  onStepChange?.(index);
+                  onNoteChange?.(null);
+                  void playPreviewChord(step.noteNames);
+                }}
+                disabled={isPlaying}
                 style={{
                   minWidth: 56,
                   minHeight: 56,
@@ -235,11 +265,13 @@ export function PlaybackControls({
                   fontWeight: isActive ? 700 : 500,
                   color: isActive ? '#166534' : '#57534e',
                   transition: 'all 0.15s ease',
+                  cursor: isPlaying ? 'not-allowed' : 'pointer',
+                  opacity: isPlaying ? 0.6 : 1,
                 }}
                 title={step.label ?? step.noteNames.join(', ')}
               >
                 {step.label ?? index + 1}
-              </div>
+              </button>
             );
           })}
         </div>

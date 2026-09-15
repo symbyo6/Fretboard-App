@@ -129,12 +129,27 @@ h1 {
   animation: audio-toggle-blink 1s ease-in-out infinite;
 }
 
+.enharmonic-toggle-active {
+  animation: enharmonic-toggle-blink 1s ease-in-out infinite;
+}
+
 @keyframes audio-toggle-blink {
   0%, 100% {
     opacity: 1;
   }
   50% {
     opacity: 0.4;
+  }
+}
+
+@keyframes enharmonic-toggle-blink {
+  0%, 100% {
+    background-color: #dc2626;
+    border-color: #991b1b;
+  }
+  50% {
+    background-color: #991b1b;
+    border-color: #7f1d1d;
   }
 }
 

@@ -16,6 +16,8 @@ import { findBestOverlapPair } from '../src/lib/shapes/shapeComparison';
 import { getMajorDegreePentatonic, getNoteName, getScaleNoteNames, resolveScale, SCALE_LIBRARY } from '../src/lib/theory/scales';
 import type { PitchClass } from '../src/types';
 import { fretToNoteName } from '../src/lib/audio/tuning';
+import { getDiatonicDelta, getTriadLinkedInversion, getTetradLinkedInversion, linkChordSequence } from '../src/lib/theory/voiceLeading';
+import { analyzeChordSequence } from '../src/lib/theory/chordSequence';
 
 interface TestResult {
   name: string;
@@ -54,6 +56,96 @@ function assertEqual<T>(actual: T, expected: T, message: string): void {
 test('C Ionian resolves to seven scale tones', () => {
   const notes = resolveScale('ionian', 'C').notes.map((pitch) => getNoteName(pitch));
   assertEqual(notes, ['C', 'D', 'E', 'F', 'G', 'A', 'B'], 'C Ionian notes');
+});
+
+test('Triad linking table follows the specified delta mappings', () => {
+  assertEqual(getDiatonicDelta(1, 2), 1, 'I to II delta');
+  assertEqual(getTriadLinkedInversion(1, 2, 1), 1, 'Triad delta 1 inversion');
+  assertEqual(getTriadLinkedInversion(1, 3, 1), 3, 'Triad delta 2 inversion');
+  assertEqual(getTriadLinkedInversion(1, 5, 1), 2, 'Triad delta 4 inversion');
+  assertEqual(getTriadLinkedInversion(1, 7, 1), 1, 'Triad delta 6 inversion');
+});
+
+test('Tetrad linking table follows the specified delta mappings', () => {
+  assertEqual(getTetradLinkedInversion(1, 2, 1), 4, 'Tetrad delta 1 inversion');
+  assertEqual(getTetradLinkedInversion(1, 4, 1), 3, 'Tetrad delta 3 inversion');
+  assertEqual(getTetradLinkedInversion(1, 5, 1), 3, 'Tetrad delta 4 inversion');
+  assertEqual(getTetradLinkedInversion(1, 7, 1), 2, 'Tetrad delta 6 inversion');
+});
+
+test('Diatonic links are reversible in both directions', () => {
+  for (let sourceDegree = 1; sourceDegree <= 7; sourceDegree += 1) {
+    for (let targetDegree = 1; targetDegree <= 7; targetDegree += 1) {
+      if (sourceDegree === targetDegree) continue;
+      for (const inversion of [1, 2, 3] as const) {
+        const linked = getTriadLinkedInversion(sourceDegree, targetDegree, inversion);
+        const returned = getTriadLinkedInversion(targetDegree, sourceDegree, linked);
+        assertEqual(returned, inversion, `Triad ${sourceDegree}->${targetDegree} is reversible`);
+      }
+      for (const inversion of [1, 2, 3, 4] as const) {
+        const linked = getTetradLinkedInversion(sourceDegree, targetDegree, inversion);
+        const returned = getTetradLinkedInversion(targetDegree, sourceDegree, linked);
+        assertEqual(returned, inversion, `Tetrad ${sourceDegree}->${targetDegree} is reversible`);
+      }
+    }
+  }
+});
+
+test('Same-root chromatic quality changes do not use the diatonic linking table', () => {
+  const chords = getAllDiatonicChords(resolveScale('ionian', 'C'), true);
+  const analysis = analyzeChordSequence('Em7 - E°7', chords);
+  const linked = linkChordSequence(analysis, 'closed', true);
+  assertEqual(linked[1]?.delta, null, 'Same-root quality change has no diatonic delta');
+  assertEqual(linked[1]?.targetInversion, linked[1]?.sourceInversion, 'Same-root quality change keeps inversion');
+  const dropTwoLinked = linkChordSequence(analysis, 'drop2-4', true);
+  assertEqual(dropTwoLinked[1]?.targetInversion, 4, 'Same-root quality change keeps the physical drop-two inversion');
+});
+
+test('Chromatic-to-diatonic links preserve inversion without using the diatonic table', () => {
+  const chords = getAllDiatonicChords(resolveScale('ionian', 'C'), true);
+  const analysis = analyzeChordSequence('E°7 - Dm7', chords);
+  const linked = linkChordSequence(analysis, 'drop2-1', true);
+  assertEqual(linked[1]?.delta, null, 'Chromatic-to-diatonic link has no diatonic delta');
+  assertEqual(linked[1]?.targetInversion, linked[1]?.sourceInversion, 'Chromatic-to-diatonic link keeps inversion');
+});
+
+test('Chromatic transitions expose physical inversion choices', () => {
+  const chords = getAllDiatonicChords(resolveScale('ionian', 'C'), true);
+  const analysis = analyzeChordSequence('Cmaj7 - Db°7 - Dm7', chords);
+  const linked = linkChordSequence(analysis, 'drop2-1', true);
+  assertEqual(linked[2]?.delta, null, 'Chromatic transition has no diatonic delta');
+  assertEqual(linked[2]?.linkStatus, 'chromatic', 'Chromatic transition is marked physical');
+});
+
+test('Diminished seventh inversions normalize to one symmetric voicing', () => {
+  const chords = getAllDiatonicChords(resolveScale('ionian', 'C'), true);
+  const analysis = analyzeChordSequence('E°7 - E°7', chords);
+  for (const voicing of ['closed', 'closed-2', 'closed-3', 'closed-4'] as const) {
+    const linked = linkChordSequence(analysis, voicing, true);
+    assertEqual(linked[0]?.targetInversion, 1, `${voicing} diminished seventh canonical inversion`);
+    assertEqual(linked[1]?.targetInversion, 1, `${voicing} repeated diminished seventh canonical inversion`);
+  }
+});
+
+test('Last linked tetrad sequence remains available through the exposed voice-leading voicings', () => {
+  const chords = getAllDiatonicChords(resolveScale('ionian', 'C'), true);
+  const analysis = analyzeChordSequence('Cmaj7 - Db°7 - Dm7 - Eb°7 - Em7 - E°7 - Dm7 - D°7 - Cmaj7', chords);
+  const routes = [
+    ['closed', 1],
+    ['drop2-1', 1],
+    ['drop2-4', 4],
+    ['drop3-1', 1],
+    ['drop3-2', 2],
+    ['drop3-3', 3],
+    ['drop3-4', 4],
+  ] as const;
+
+  for (const [voicing, expectedInitialInversion] of routes) {
+    const linked = linkChordSequence(analysis, voicing, true);
+    assertEqual(linked[0]?.targetInversion, expectedInitialInversion, `${voicing} initial inversion`);
+    assert(!linked.some((step) => step.linkStatus === 'unavailable'), `${voicing} sequence remains available`);
+    assert(linked.every((step) => step.targetInversion !== null), `${voicing} every step has a target inversion`);
+  }
 });
 
 test('Note naming never emits E# or B#', () => {
@@ -158,7 +250,7 @@ test('Drop 2 reorders triads and seventh chords without changing their tones', (
   );
   assertEqual(
     toVoicing(seventh, 'drop2-1').tones.map((tone) => tone.role),
-    ['root', 'fifth', 'seventh', 'third'],
+    ['fifth', 'root', 'third', 'seventh'],
     'Drop 2 position 1 order'
   );
   assertEqual(
@@ -168,29 +260,39 @@ test('Drop 2 reorders triads and seventh chords without changing their tones', (
   );
   assertEqual(
     toVoicing(seventh, 'drop2-2').tones.map((tone) => tone.role),
-    ['third', 'seventh', 'root', 'fifth'],
+    ['seventh', 'third', 'fifth', 'root'],
     'Drop 2 position 2 order'
   );
   assertEqual(
     toVoicing(seventh, 'drop2-3').tones.map((tone) => tone.role),
-    ['fifth', 'root', 'third', 'seventh'],
+    ['root', 'fifth', 'seventh', 'third'],
     'Drop 2 position 3 order'
   );
   assertEqual(
     toVoicing(seventh, 'drop2-4').tones.map((tone) => tone.role),
-    ['seventh', 'third', 'fifth', 'root'],
+    ['third', 'seventh', 'root', 'fifth'],
     'Drop 2 position 4 order'
   );
   assertEqual(
     toVoicing(seventh, 'drop3-1').tones.map((tone) => tone.role),
-    ['root', 'seventh', 'third', 'fifth'],
+    ['third', 'root', 'fifth', 'seventh'],
     'Drop 3 position 1 order'
   );
   assertEqual(
     toVoicing(seventh, 'drop3-2').tones.map((tone) => tone.role),
-    ['third', 'root', 'fifth', 'seventh'],
+    ['fifth', 'third', 'seventh', 'root'],
     'Drop 3 position 2 order'
   );
+});
+
+test('Drop voicing positions match their labeled inversions', () => {
+  const chord = buildDiatonicChord(resolveScale('ionian', 'C'), 1, true);
+  const expectedDrop2 = [[2, 0, 1, 3], [3, 1, 2, 0], [0, 2, 3, 1], [1, 3, 0, 2]];
+  const expectedDrop3 = [[1, 0, 2, 3], [2, 1, 3, 0], [3, 2, 0, 1], [0, 3, 1, 2]];
+  for (let index = 0; index < 4; index += 1) {
+    assertEqual(toVoicing(chord, `drop2-${index + 1}` as const).tones.map((tone) => chord.tones.indexOf(tone)), expectedDrop2[index], `Drop 2 inversion ${index + 1}`);
+    assertEqual(toVoicing(chord, `drop3-${index + 1}` as const).tones.map((tone) => chord.tones.indexOf(tone)), expectedDrop3[index], `Drop 3 inversion ${index + 1}`);
+  }
 });
 
 test('A melodic minor identifies characteristic seventh chords', () => {

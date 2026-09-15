@@ -23,6 +23,10 @@ npm.cmd run dev
 
 Open the local URL printed by Vite, normally `http://localhost:5173/`.
 
+### Start without VS Code
+
+Double-click `iniciar-fretboard.bat` in the project folder. It builds the production version, starts the HTTP server, and opens `http://127.0.0.1:4173/` in the browser. Keep the black server window open while using the app; close it to stop the server.
+
 ## Preview the production build
 
 ```powershell

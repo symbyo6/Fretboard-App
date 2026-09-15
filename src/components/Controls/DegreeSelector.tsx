@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import type { DiatonicChordInfo, DegreeLabelMode } from '../../types';
 import { CHORD_QUALITY_SUFFIX } from '../../lib/theory/chords';
+import { useLanguage } from '../../i18n';
 
 interface DegreeSelectorProps {
   chords: DiatonicChordInfo[];
@@ -22,6 +23,7 @@ interface DegreeSelectorProps {
   onLabelModeChange?: (mode: DegreeLabelMode) => void;
   isMuted: boolean;
   onToggleMuted: () => void;
+  scaleControlsMuted?: boolean;
 }
 
 /** Fila horizontal de grados diatónicos, desplazable en pantallas pequeñas. */
@@ -43,7 +45,9 @@ export function DegreeSelector({
   onLabelModeChange,
   isMuted,
   onToggleMuted,
+  scaleControlsMuted = false,
 }: DegreeSelectorProps): JSX.Element {
+  const { t } = useLanguage();
   const [internalLabelMode, setInternalLabelMode] = useState<DegreeLabelMode>(labelMode);
   const activeLabelMode = onLabelModeChange ? labelMode : internalLabelMode;
   const modeDegreeLabels = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
@@ -66,14 +70,14 @@ export function DegreeSelector({
 
   return (
     <div className="degree-selector-layout" aria-label="Selector de grado diatónico">
-      <div className="degree-selector-legend" style={legendHeaderStyle}>
+      <div className="degree-selector-legend" style={{ ...legendHeaderStyle, ...(scaleControlsMuted ? mutedScaleControlStyle : {}) }}>
         <div style={rangeWrapperStyle}>
-          <span style={modeLegendStyle}>Escala</span>
-          <div style={familyStyle} role="radiogroup" aria-label="Escala fundamental">
+          <span style={modeLegendStyle}>{t('scale')}</span>
+          <div style={familyStyle} role="radiogroup" aria-label={t('scaleFundamental')}>
             {([
-              ['major', 'Mayor'],
-              ['harmonic-minor', 'Menor armónica'],
-              ['melodic-minor', 'Menor melódica'],
+              ['major', t('major')],
+              ['harmonic-minor', t('harmonicMinor')],
+              ['melodic-minor', t('melodicMinor')],
             ] as const).map(([family, label]) => (
               <button
                 key={family}
@@ -89,9 +93,9 @@ export function DegreeSelector({
           </div>
         </div>
       </div>
-      <div className="degree-selector-mode-buttons" style={headerStyle}>
+      <div className="degree-selector-mode-buttons" style={{ ...headerStyle, ...(scaleControlsMuted ? mutedScaleControlStyle : {}) }}>
         <div style={rangeWrapperStyle}>
-          <span style={modeLegendStyle}>Modo</span>
+          <span style={modeLegendStyle}>{t('mode')}</span>
           <div style={rangeStyle}>
             {chords.map((chord) => (
               <button
@@ -112,11 +116,11 @@ export function DegreeSelector({
               style={toggleStyle}
               aria-label={
                 activeLabelMode === 'roman'
-                  ? 'Cambiar a números Nashville'
-                  : 'Cambiar a numerales romanos'
+                  ? t('nashvilleNumbers')
+                  : t('romanNumerals')
               }
             >
-              {activeLabelMode === 'roman' ? 'Numerales romanos' : 'Números Nashville'}
+              {activeLabelMode === 'roman' ? t('romanNumerals') : t('nashvilleNumbers')}
             </button>
           </div>
         </div>
@@ -124,7 +128,7 @@ export function DegreeSelector({
 
       <div className="degree-selector-red-buttons" style={chordRowStyle}>
         <div style={rangeWrapperStyle}>
-          <span style={modeLegendStyle}>Grados Diatónicos</span>
+          <span style={modeLegendStyle}>{t('diatonicDegrees')}</span>
           <div
             role="radiogroup"
             style={groupStyle}
@@ -205,18 +209,18 @@ export function DegreeSelector({
             gap: '0.5rem',
           }}
         >
-          {isMuted ? '🔇 Audio: Off' : '🔊 Audio: On'}
+          {isMuted ? `🔇 ${t('audioOff')}` : `🔊 ${t('audioOn')}`}
         </button>
       </div>
       <div className="degree-selector-summary" style={selectionSummaryRowStyle}>
         <div style={selectionSummaryStyle} aria-label="Tonalidad actual">
-          <span style={selectionSummaryLabelStyle}>Tonalidad</span>
+          <span style={selectionSummaryLabelStyle}>{t('tonality')}</span>
           <span style={selectionSummaryValueStyle}>{tonicName}</span>
         </div>
       </div>
       <div className="degree-selector-playing" style={playingChordRowStyle} aria-live="polite">
         <div style={playingChordContentStyle}>
-          <span style={playingChordLegendStyle}>Acorde sonando</span>
+          <span style={playingChordLegendStyle}>{t('chordPlaying')}</span>
           <span style={playingChordStyle}>{playingChordLabel ?? '—'}</span>
           <div style={liveTabStyle} aria-label="Tablatura del acorde sonando">
             {Array.from({ length: 6 }, (_, index) => {
@@ -247,6 +251,11 @@ const legendHeaderStyle: React.CSSProperties = {
   flexDirection: 'column',
   gap: '0.35rem',
   marginBottom: '0.35rem',
+};
+
+const mutedScaleControlStyle: React.CSSProperties = {
+  opacity: 0.55,
+  filter: 'grayscale(1)',
 };
 
 const familyStyle: React.CSSProperties = {
@@ -417,10 +426,11 @@ const selectionSummaryLabelStyle: React.CSSProperties = {
 
 const selectionSummaryValueStyle: React.CSSProperties = {
   color: '#292524',
-  fontSize: 'clamp(2rem, 9vw, 3.3rem)',
+  fontSize: 'clamp(1.6rem, 6vw, 2.6rem)',
   fontWeight: 700,
-  lineHeight: 1,
-  whiteSpace: 'nowrap',
+  lineHeight: 1.05,
+  maxWidth: '100%',
+  overflowWrap: 'break-word',
   letterSpacing: 0,
 };
 

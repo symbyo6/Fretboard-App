@@ -13,10 +13,16 @@ import { ScaleSelector } from './ScaleSelector';
 import { DegreeSelector } from './DegreeSelector';
 import { NotationAndChordToggles } from './NotationAndChordToggles';
 import { getNoteName, getScaleById } from '../../lib/theory/scales';
+import { useLanguage } from '../../i18n';
+import { ChordSequencePanel } from './ChordSequencePanel';
+import type { ParsedChordToken } from '../../lib/theory/chordSequence';
+import type { LinkedChordStep } from '../../lib/theory/voiceLeading';
 
 export interface ControlsPanelProps {
   rootPitch: PitchClass;
   preferredTonicName?: KeyName;
+  useEnharmonicTonicName: boolean;
+  onTonicNamePreferenceChange: (useEnharmonic: boolean) => void;
   onRootPitchChange: (pitch: PitchClass) => void;
   scaleId: string;
   onScaleIdChange: (scaleId: string) => void;
@@ -40,6 +46,15 @@ export interface ControlsPanelProps {
   onDegreeLabelModeChange: (mode: DegreeLabelMode) => void;
   isMuted: boolean;
   onToggleMuted: () => void;
+  chordSequence: string;
+  onChordSequenceChange: (value: string) => void;
+  analyzedChordSequence: ParsedChordToken[];
+  linkedChordSequence: LinkedChordStep[];
+  sequenceMode: 'diatonic' | 'linked';
+  onSequenceModeChange: (mode: 'diatonic' | 'linked') => void;
+  hasMixedChordTypes: boolean;
+  onClearChordSequence: () => void;
+  linkedSequenceUnavailable: boolean;
 }
 
 /** Detecta viewport angosto sin depender de hooks externos. */
@@ -61,6 +76,8 @@ function useIsCompactViewport(breakpointPx = 720): boolean {
 export function ControlsPanel({
   rootPitch,
   preferredTonicName,
+  useEnharmonicTonicName,
+  onTonicNamePreferenceChange,
   onRootPitchChange,
   scaleId,
   onScaleIdChange,
@@ -84,8 +101,18 @@ export function ControlsPanel({
   onDegreeLabelModeChange,
   isMuted,
   onToggleMuted,
+  chordSequence,
+  onChordSequenceChange,
+  analyzedChordSequence,
+  linkedChordSequence,
+  sequenceMode,
+  onSequenceModeChange,
+  hasMixedChordTypes,
+  onClearChordSequence,
+  linkedSequenceUnavailable,
 }: ControlsPanelProps): JSX.Element {
   const isCompact = useIsCompactViewport();
+  const { language, setLanguage, t } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const shouldShowControls = !isCompact || isExpanded;
 
@@ -105,7 +132,7 @@ export function ControlsPanel({
 
   return (
     <section
-      aria-label="Panel de controles"
+      aria-label={language === 'es' ? 'Panel de controles' : 'Controls panel'}
       style={{
         background: 'white',
         borderRadius: '0.9rem',
@@ -113,6 +140,26 @@ export function ControlsPanel({
         padding: shouldShowControls ? '0.9rem' : '0.5rem 0.9rem',
       }}
     >
+      <div style={languageRowStyle}>
+        <span>{t('language')}</span>
+        <div role="group" aria-label={t('language')} style={languageSwitchStyle}>
+          {(['es', 'en'] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={language === option}
+              onClick={() => setLanguage(option)}
+              style={{
+                ...languageButtonStyle,
+                background: language === option ? '#0f766e' : 'white',
+                color: language === option ? 'white' : '#292524',
+              }}
+            >
+              {option === 'es' ? t('spanish') : t('english')}
+            </button>
+          ))}
+        </div>
+      </div>
       {isCompact && (
         <button
           type="button"
@@ -140,10 +187,24 @@ export function ControlsPanel({
           <KeySelector
             value={rootPitch}
             preferredTonicName={preferredTonicName}
+            useEnharmonicTonicName={useEnharmonicTonicName}
+            onTonicNamePreferenceChange={onTonicNamePreferenceChange}
             onChange={onRootPitchChange}
           />
 
-          <ScaleSelector value={scaleId} onChange={onScaleIdChange} />
+          <ScaleSelector value={scaleId} onChange={onScaleIdChange} muted={sequenceMode === 'linked'} />
+
+          <ChordSequencePanel
+            value={chordSequence}
+            onChange={onChordSequenceChange}
+            analysis={analyzedChordSequence}
+            linkedSequence={linkedChordSequence}
+            hasMixedChordTypes={hasMixedChordTypes}
+            onClear={onClearChordSequence}
+            linkedSequenceUnavailable={linkedSequenceUnavailable}
+            sequenceMode={sequenceMode}
+            onSequenceModeChange={onSequenceModeChange}
+          />
 
           <NotationAndChordToggles
             notationLabel={notationLabel}
@@ -168,6 +229,7 @@ export function ControlsPanel({
               onLabelModeChange={onDegreeLabelModeChange}
               isMuted={isMuted}
               onToggleMuted={onToggleMuted}
+              scaleControlsMuted={sequenceMode === 'linked'}
             />
           )}
         </div>
@@ -188,4 +250,32 @@ const collapseButtonStyle: React.CSSProperties = {
   fontSize: '0.95rem',
   color: '#292524',
   cursor: 'pointer',
+};
+
+const languageRowStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'flex-end',
+  alignItems: 'center',
+  gap: '0.5rem',
+  marginBottom: '0.65rem',
+  color: '#57534e',
+  fontSize: '0.8rem',
+  fontWeight: 600,
+};
+
+const languageSwitchStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  border: '1px solid #d6d3d1',
+  borderRadius: '0.45rem',
+  overflow: 'hidden',
+};
+
+const languageButtonStyle: React.CSSProperties = {
+  minHeight: 32,
+  padding: '0 0.65rem',
+  border: 'none',
+  borderRight: '1px solid #d6d3d1',
+  cursor: 'pointer',
+  fontSize: '0.76rem',
+  fontWeight: 700,
 };

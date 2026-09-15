@@ -8,6 +8,8 @@ export interface ProgressionStep {
   id: string;
   noteNames: string[];
   label?: string;
+  inversion?: number;
+  stringGroup?: string;
   positions: { string: number; fret: number }[];
   positionKeys: string[];
   pitches?: number[];
@@ -72,16 +74,17 @@ export function useProgression(
   const play = useCallback(async () => {
     if (steps.length === 0) return;
 
+    stop();
     try {
       await audioEngine.unlock();
     } catch (error) {
       onPlaybackError?.(error);
       return;
     }
-    stop();
     Tone.Transport.position = 0;
 
     Tone.Transport.bpm.value = bpm;
+    const playbackLeadIn = 0.08;
     const baseSecondsPerStep = 60 / bpm;
     const minimumNoteSpacing = 0.14;
     const orderedSteps = steps;
@@ -91,7 +94,7 @@ export function useProgression(
     let elapsedSeconds = 0;
     const events = orderedSteps.map((step, index) => {
       const event = {
-        time: elapsedSeconds,
+        time: playbackLeadIn + elapsedSeconds,
         index,
         noteNames: step.noteNames,
         durationSeconds: stepDurations[index],
@@ -112,7 +115,7 @@ export function useProgression(
 
         if (mode === 'chord') {
           onNoteChange?.(null);
-          audioEngine.playChord(event.noteNames, event.durationSeconds * 0.9);
+          audioEngine.playScheduledChord(event.noteNames, event.durationSeconds * 0.82, 0.75, _time);
           return;
         }
 
@@ -121,7 +124,7 @@ export function useProgression(
           : event.noteNames;
         const spacing = event.durationSeconds / Math.max(orderedNotes.length, 1);
         onNoteChange?.(direction === 'descending' ? orderedNotes.length - 1 : 0);
-        audioEngine.playArpeggio(orderedNotes, spacing, spacing * 0.9, (noteIndex) => {
+        audioEngine.playScheduledArpeggio(orderedNotes, spacing, spacing * 0.9, (noteIndex) => {
           onNoteChange?.(direction === 'descending'
             ? orderedNotes.length - 1 - noteIndex
             : noteIndex);
@@ -138,7 +141,7 @@ export function useProgression(
 
     Tone.Transport.scheduleOnce(() => {
       stop();
-    }, elapsedSeconds + 0.05);
+    }, playbackLeadIn + elapsedSeconds + 0.05);
   }, [steps, bpm, mode, direction, onStepChange, onNoteChange, onPlayingChange, onPlaybackError, stop]);
 
   return { isPlaying, currentIndex, play, stop };

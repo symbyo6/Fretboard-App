@@ -27,7 +27,8 @@ import {
 
 import { getNoteName } from '../../lib/theory/scales';
 import { classifyPitch } from '../../lib/theory/chords';
-import { downloadFretboardPdf, type FretboardPdfDetails } from '../../lib/tabPdf';
+import { downloadFretboardJpeg, downloadFretboardPdf, downloadFretboardSequence, type FretboardDiagramStep, type FretboardPdfDetails } from '../../lib/tabPdf';
+import { useLanguage } from '../../i18n';
 
 import {
   computeFretboardLayout,
@@ -49,6 +50,10 @@ interface FretboardProps {
   chordRootPitch?: PitchClass;
   scaleToneSet: Set<PitchClass>;
   chordToneSet: Set<PitchClass>;
+  hideScaleTones?: boolean;
+  hideFundamentalRootRings?: boolean;
+  hideFundamentalRootNotes?: boolean;
+  neutralizeRootStyle?: boolean;
   notation?: NotationPreference;
   labelMode?: LabelMode;
   getNoteLabel?: (position: FretboardPosition, pitch: PitchClass) => string;
@@ -59,7 +64,8 @@ interface FretboardProps {
   layoutConfig?: Partial<FretboardLayoutConfig>;
   onNotePlay?: (position: FretboardPosition, pitch: PitchClass) => void;
   pdfDetails?: FretboardPdfDetails;
-  onExportSequencePdf?: () => void | Promise<void>;
+  onExportSequence?: (format: 'pdf' | 'jpeg') => void | Promise<void>;
+  sequenceDiagramSteps?: FretboardDiagramStep[];
   hasSequenceSteps?: boolean;
   isSequencePlaying?: boolean;
   children?: (ctx: {
@@ -89,6 +95,22 @@ const SECONDARY_ROOT_STYLE = {
   textColor: '#ffffff',
 };
 
+const FRETBOARD_VIEW_STORAGE_KEY = 'fretboard-view-settings-v1';
+
+interface FretboardViewSettings {
+  imageFormat?: 'pdf' | 'jpeg';
+  zoom?: number;
+}
+
+function loadFretboardViewSettings(): FretboardViewSettings {
+  try {
+    const saved = window.localStorage.getItem(FRETBOARD_VIEW_STORAGE_KEY);
+    return saved ? JSON.parse(saved) as FretboardViewSettings : {};
+  } catch {
+    return {};
+  }
+}
+
 // ============================================================
 // COMPONENTE PRINCIPAL
 // ============================================================
@@ -100,6 +122,10 @@ export function Fretboard({
   chordRootPitch,
   scaleToneSet,
   chordToneSet,
+  hideScaleTones = false,
+  hideFundamentalRootRings = false,
+  hideFundamentalRootNotes = false,
+  neutralizeRootStyle = false,
   notation = 'sharps',
   labelMode = 'noteName',
   getNoteLabel,
@@ -110,11 +136,13 @@ export function Fretboard({
   layoutConfig,
   onNotePlay,
   pdfDetails,
-  onExportSequencePdf,
+  onExportSequence,
+  sequenceDiagramSteps = [],
   hasSequenceSteps = false,
   isSequencePlaying = false,
   children,
 }: FretboardProps): JSX.Element {
+  const { t } = useLanguage();
   const layout = useMemo(
     () => computeFretboardLayout({ fretCount, ...layoutConfig }),
     [fretCount, layoutConfig]
@@ -125,8 +153,18 @@ export function Fretboard({
     [layout]
   );
 
-  const [zoom, setZoom] = useState(0.6);
-  const [autoFit, setAutoFit] = useState(true);
+  const initialViewSettings = useMemo(() => loadFretboardViewSettings(), []);
+  const [zoom, setZoom] = useState(initialViewSettings.zoom ?? 0.6);
+  const [autoFit, setAutoFit] = useState(initialViewSettings.zoom === undefined);
+  const [imageFormat, setImageFormat] = useState<'pdf' | 'jpeg'>(initialViewSettings.imageFormat ?? 'pdf');
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FRETBOARD_VIEW_STORAGE_KEY, JSON.stringify({ imageFormat, zoom }));
+    } catch {
+      // Continue normally if browser storage is unavailable.
+    }
+  }, [imageFormat, zoom]);
   const clampZoom = (value: number) => Math.min(1.6, Math.max(0.35, value));
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -187,11 +225,12 @@ export function Fretboard({
       for (let fret = 0; fret <= layout.fretCount; fret++) {
         const string = stringNumber as StringNumber;
         const pitch = getPitchAtPosition(string, fret, STANDARD_TUNING);
+        const classification = classifyPitch(pitch, scaleToneSet, chordToneSet);
         const category: NoteCategory = pitch === rootPitch
           ? 'root'
-          : classifyPitch(pitch, scaleToneSet, chordToneSet) === 'chord-tone'
+          : classification === 'chord-tone'
             ? 'chordTone'
-            : classifyPitch(pitch, scaleToneSet, chordToneSet) === 'scale-tone'
+            : classification === 'scale-tone'
               ? 'scaleTone'
               : 'outside';
 
@@ -229,7 +268,9 @@ export function Fretboard({
         height: layout.totalHeight,
       }
       : undefined;
-    void downloadFretboardPdf(svgRef.current, pdfDetails, viewBox);
+    void (imageFormat === 'pdf'
+      ? downloadFretboardPdf(svgRef.current, pdfDetails, viewBox)
+      : downloadFretboardJpeg(svgRef.current, pdfDetails, viewBox));
   };
 
   return (
@@ -273,35 +314,66 @@ export function Fretboard({
         >
           +
         </button>
+        <div role="group" aria-label="Formato de imagen" style={imageFormatStyle}>
+          {(['pdf', 'jpeg'] as const).map((format) => (
+            <button
+              key={format}
+              type="button"
+              aria-pressed={imageFormat === format}
+              onClick={() => setImageFormat(format)}
+              style={{
+                ...imageFormatButtonStyle,
+                background: imageFormat === format ? '#0f766e' : 'white',
+                color: imageFormat === format ? 'white' : '#292524',
+              }}
+            >
+              {format.toUpperCase()}
+            </button>
+          ))}
+        </div>
         <button
           type="button"
           onClick={() => exportPdf(true)}
           disabled={!highlightedPositions?.size}
-          aria-label="Exportar frets resaltados a PDF"
-          title="Exportar solo los frets resaltados a PDF"
+          aria-label={`${imageFormat.toUpperCase()} ${t('highlightedFrets')}`}
+          title={`${imageFormat.toUpperCase()} ${t('highlightedFrets')}`}
           style={pdfButtonStyle}
         >
-          PDF frets resaltados
+          {imageFormat.toUpperCase()} {t('highlightedFrets')}
         </button>
         <button
           type="button"
           onClick={() => exportPdf(false)}
-          aria-label="Exportar diapasón completo a PDF"
-          title="Exportar el diapasón completo a PDF"
+          aria-label={`${imageFormat.toUpperCase()} ${t('fullFretboard')}`}
+          title={`${imageFormat.toUpperCase()} ${t('fullFretboard')}`}
           style={pdfButtonStyle}
         >
-          PDF diapasón completo
+          {imageFormat.toUpperCase()} {t('fullFretboard')}
         </button>
-        {onExportSequencePdf && (
+        {onExportSequence && (
           <button
             type="button"
-            onClick={onExportSequencePdf}
+            onClick={() => onExportSequence(imageFormat)}
             disabled={!hasSequenceSteps || isSequencePlaying}
-            aria-label="Exportar tab de la secuencia de acordes a PDF"
-            title="Exportar tab de la secuencia de acordes a PDF"
+            aria-label={`${imageFormat.toUpperCase()} ${t('tabSequence')}`}
+            title={`${imageFormat.toUpperCase()} ${t('tabSequence')}`}
             style={pdfButtonStyle}
           >
-            PDF tab secuencia acordes escala
+            {imageFormat.toUpperCase()} {t('tabSequence')}
+          </button>
+        )}
+        {onExportSequence && sequenceDiagramSteps.length > 0 && (
+          <button
+            type="button"
+            onClick={() => {
+              if (!svgRef.current) return;
+              void downloadFretboardSequence(svgRef.current, sequenceDiagramSteps, getPixelPosition, imageFormat);
+            }}
+            aria-label={`${imageFormat.toUpperCase()} linked sequence diagrams`}
+            title="Export one fretboard diagram per linked chord"
+            style={pdfButtonStyle}
+          >
+            {imageFormat.toUpperCase()} sequence diagrams
           </button>
         )}
       </div>
@@ -435,18 +507,29 @@ export function Fretboard({
               </text>
             ))}
 
-          {renderablePositions.map(({ position, pitch, category }) => {
+          {(() => {
+            const playedFundamentalRootKey = renderablePositions.find(({ position, pitch }) => (
+              pitch === fundamentalRootPitch
+              && highlightedPositions?.has(`${position.string}-${position.fret}`)
+            ));
+            const playedFundamentalRootPositionKey = playedFundamentalRootKey
+              ? `${playedFundamentalRootKey.position.string}-${playedFundamentalRootKey.position.fret}`
+              : null;
+
+            return renderablePositions.map(({ position, pitch, category }) => {
             const isSecondaryRoot = chordRootPitch !== undefined
               && chordRootPitch !== rootPitch
               && pitch === chordRootPitch;
-            const isModeRootGreen = category === 'root' && !rootIsRed;
+            const isActiveChordRoot = chordRootPitch !== undefined && pitch === chordRootPitch;
+            const isLinkedChordMode = hideScaleTones;
+            const isModeRootGreen = category === 'root' && !rootIsRed && !hideFundamentalRootNotes;
             const isFundamentalRoot = pitch === fundamentalRootPitch;
             const { x, y } = getPixelPosition(position);
             const label = resolveLabel(position, pitch);
             const isRootInChord = category === 'root' && chordToneSet.has(pitch);
             const isChordOrRoot = category === 'chordTone'
               || isRootInChord
-              || isSecondaryRoot
+              || isActiveChordRoot
               || isModeRootGreen;
             const isMutedRoot = category === 'root' && !isRootInChord;
             const radius = isChordOrRoot
@@ -455,11 +538,15 @@ export function Fretboard({
                 ? layout.noteRadius * 0.48
                 : layout.noteRadius * 0.75;
             const isHighlighted = highlightedPositions?.has(`${position.string}-${position.fret}`) ?? false;
-            const isPlayedFundamentalRoot = isHighlighted && isFundamentalRoot;
-            const style = isPlayedFundamentalRoot
+            const isPlayedFundamentalRoot = `${position.string}-${position.fret}` === playedFundamentalRootPositionKey;
+            const style = isLinkedChordMode && isActiveChordRoot
+              ? SECONDARY_ROOT_STYLE
+              : isPlayedFundamentalRoot && !neutralizeRootStyle
               ? CATEGORY_STYLES.root
-              : isSecondaryRoot
+              : isActiveChordRoot
                 ? SECONDARY_ROOT_STYLE
+                : neutralizeRootStyle && category === 'root'
+                  ? CATEGORY_STYLES.chordTone
                 : CATEGORY_STYLES[category];
             const noteFill = isMutedRoot ? '#cbd5e1' : style.fill;
             const noteStroke = isMutedRoot ? '#94a3b8' : style.stroke;
@@ -469,6 +556,13 @@ export function Fretboard({
             return (
               <g
                 key={`${position.string}-${position.fret}`}
+                data-fretboard-note="true"
+                data-note-pitch={String(pitch)}
+                data-note-category={category}
+                data-note-string={String(position.string)}
+                data-note-fret={String(position.fret)}
+                data-note-radius={String(radius)}
+                data-note-label={label || getNoteName(pitch, notation)}
                 transform={`translate(${x}, ${y})`}
                 onClick={() => onNotePlay?.(position, pitch)}
                 onTouchStart={() => onNotePlay?.(position, pitch)}
@@ -478,8 +572,12 @@ export function Fretboard({
                 style={{ cursor: onNotePlay ? 'pointer' : 'default', outline: 'none' }}
               >
                 <circle r={22} fill="transparent" />
-                {category !== 'outside' && (
+                {category !== 'outside'
+                  && !(hideScaleTones && !chordToneSet.has(pitch))
+                  && !(hideFundamentalRootNotes && isFundamentalRoot && !chordToneSet.has(pitch))
+                  && (
                   <circle
+                    data-note-body="true"
                     r={radius}
                     fill={noteFill}
                     fillOpacity={noteFillOpacity}
@@ -487,10 +585,11 @@ export function Fretboard({
                     strokeWidth={category === 'root' ? 2.5 : 1.5}
                     strokeOpacity={noteStrokeOpacity}
                   />
-                )}
+                  )}
 
                 {isHighlighted && (
                   <circle
+                    data-note-highlight="true"
                     r={radius + 7}
                     fill="#facc15"
                     fillOpacity={0.22}
@@ -499,8 +598,7 @@ export function Fretboard({
                   />
                 )}
 
-                {!isPlayedFundamentalRoot && ((rootIsRed && category === 'root' && isMutedRoot)
-                  || (!rootIsRed && isFundamentalRoot)) && (
+                {!hideFundamentalRootRings && !isPlayedFundamentalRoot && isFundamentalRoot && !chordToneSet.has(pitch) && (
                   <circle
                     r={radius + (isMutedRoot ? 6 : 5)}
                     fill="none"
@@ -524,7 +622,8 @@ export function Fretboard({
                 )}
               </g>
             );
-          })}
+            });
+          })()}
 
           {children?.({ getPixelPosition, layout })}
         </svg>
@@ -534,23 +633,24 @@ export function Fretboard({
         style={legendStyle}
       >
         <span style={legendItemStyle}>
-          <span style={legendRootMarkerStyle}>
-            <span style={{ ...legendSwatchStyle, background: '#f43f5e', borderColor: '#be123c' }} />
-            <span aria-hidden="true" style={legendRootRingStyle} />
-          </span>
-          Tónica de la escala
+          <span style={{ ...legendSwatchStyle, background: '#f43f5e', borderColor: '#be123c' }} />
+          {t('redFill')}
+        </span>
+        <span style={legendItemStyle}>
+          <span aria-hidden="true" style={legendRootRingStyle} />
+          {t('redRing')}
         </span>
         <span style={legendItemStyle}>
           <span style={{ ...legendSwatchStyle, background: '#16a34a', borderColor: '#166534' }} />
-          Tónica del acorde
+          {t('greenFill')}
         </span>
         <span style={legendItemStyle}>
           <span style={{ ...legendSwatchStyle, background: '#6366f1', borderColor: '#4338ca' }} />
-          Nota del acorde
+          {t('blueFill')}
         </span>
         <span style={legendItemStyle}>
           <span style={{ ...legendSwatchStyle, background: '#cbd5e1', borderColor: '#94a3b8' }} />
-          Nota de la escala
+          {t('grayFill')}
         </span>
       </div>
     </div>
@@ -575,6 +675,25 @@ const pdfButtonStyle: React.CSSProperties = {
   background: '#f0fdfa',
   color: '#0f766e',
   fontSize: '1.25rem',
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const imageFormatStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'stretch',
+  border: '1px solid #0f766e',
+  borderRadius: '0.5rem',
+  overflow: 'hidden',
+};
+
+const imageFormatButtonStyle: React.CSSProperties = {
+  minHeight: 58,
+  minWidth: 72,
+  padding: '0 0.8rem',
+  border: 'none',
+  borderRight: '1px solid #0f766e',
+  fontSize: '1.05rem',
   fontWeight: 700,
   cursor: 'pointer',
 };
@@ -604,19 +723,10 @@ const legendSwatchStyle: React.CSSProperties = {
   borderRadius: '50%',
 };
 
-const legendRootMarkerStyle: React.CSSProperties = {
-  width: 30,
-  height: 18,
-  flexShrink: 0,
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'flex-start',
-  gap: 5,
-};
-
 const legendRootRingStyle: React.CSSProperties = {
   width: 14,
   height: 14,
+  display: 'inline-block',
   flexShrink: 0,
   border: '2px dotted #ef4444',
   borderRadius: '50%',

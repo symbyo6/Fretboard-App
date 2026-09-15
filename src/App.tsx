@@ -9,8 +9,11 @@ import { useAudioEngine } from './hooks/useAudioEngine';
 import { fretToNoteName } from './lib/audio/tuning';
 import { getAllPositionsForPitch } from './lib/theory/fretboardPositions';
 import { getMajorDegreePentatonic, getScaleById, resolveScale } from './lib/theory/scales';
-import { downloadTabPdf } from './lib/tabPdf';
-import type { ProgressionStep, SequenceDirection } from './hooks/useProgression';
+import { downloadTabJpeg, downloadTabPdf, type FretboardDiagramStep } from './lib/tabPdf';
+import { localizeTheoryName, useLanguage } from './i18n';
+import { analyzeChordSequence, parseChordToken } from './lib/theory/chordSequence';
+import { linkChordSequence } from './lib/theory/voiceLeading';
+import type { PlaybackMode, ProgressionStep, SequenceDirection } from './hooks/useProgression';
 import type {
   DiatonicChord,
   DegreeLabelMode,
@@ -27,14 +30,49 @@ const KEY_TO_PITCH: Record<KeyName, PitchClass> = {
   'F#': 6, Gb: 6, G: 7, 'G#': 8, Ab: 8, A: 9, 'A#': 10, Bb: 10, B: 11,
 };
 
+const ENHARMONIC_KEY_NAMES: Partial<Record<KeyName, KeyName>> = {
+  'C#': 'Db', Db: 'C#', 'D#': 'Eb', Eb: 'D#', 'F#': 'Gb', Gb: 'F#',
+  'G#': 'Ab', Ab: 'G#', 'A#': 'Bb', Bb: 'A#',
+};
+
+function getDisplayedTonicName(key: KeyName, useEnharmonicName: boolean): KeyName {
+  return useEnharmonicName ? (ENHARMONIC_KEY_NAMES[key] ?? key) : key;
+}
+
+function getDisplayedChordSymbol(chord: DiatonicChord, useEnharmonicName: boolean): string {
+  const chordRootName = getDisplayedTonicName(chord.rootName as KeyName, useEnharmonicName);
+  return `${chordRootName}${chord.symbol.slice(chord.rootName.length)}`;
+}
+
+function getDisplayedNoteName(noteName: string, useEnharmonicName: boolean): string {
+  return getDisplayedTonicName(noteName as KeyName, useEnharmonicName);
+}
+
+function getModeFamilyLabel(family: ModeFamily): string {
+  return family === 'major' ? 'Mayor' : family === 'harmonic-minor' ? 'Menor armónica' : 'Menor melódica';
+}
+
+function getNotationLabel(label: 'flats' | 'sharps' | 'none'): string {
+  return label === 'flats' ? 'Bemoles' : label === 'sharps' ? 'Sostenidos' : 'Ninguna';
+}
+
+function getVoicingLabel(type: ChordVoicingType): string {
+  return type === 'closed' ? 'Cerrado' : type === 'drop2' ? 'Drop 2' : 'Drop 3';
+}
+
+function getDirectionLabel(direction: SequenceDirection): string {
+  return direction === 'ascending' ? 'Ascendente' : 'Descendente';
+}
+
+function isExtendedChordQuality(quality: string | null): boolean {
+  return quality !== null && [
+    'major7', 'minor7', 'dominant7', 'minorMajor7', 'halfDiminished7',
+    'diminished7', 'augmented7', 'majorAugmented7', 'dominant7Flat5',
+  ].includes(quality);
+}
+
 const MAJOR_MODE_IDS = [
-  'ionian',
-  'dorian',
-  'phrygian',
-  'lydian',
-  'mixolydian',
-  'aeolian',
-  'locrian',
+  'ionian', 'dorian', 'phrygian', 'lydian', 'mixolydian', 'aeolian', 'locrian',
 ] as const;
 
 type ModeFamily = 'major' | 'harmonic-minor' | 'melodic-minor';
@@ -108,7 +146,49 @@ const CHORD_INTERVAL_LABELS: Record<number, string> = {
 };
 
 const MAX_FRETBOARD_FRET = 24;
-const MAX_VOICING_FRET_SPAN = 5;
+// Five visible frets means a maximum distance of four between the extremes.
+const MAX_VOICING_FRET_SPAN = 4;
+const MAX_LINK_VOICE_JUMP = 8;
+const APP_SETTINGS_STORAGE_KEY = 'fretboard-app-settings-v1';
+
+interface PersistedAppSettings {
+  key: KeyName;
+  useEnharmonicTonicName: boolean;
+  modeBaseKey: KeyName;
+  scaleId: string;
+  degree: number;
+  modeDegree: number;
+  modeFamily: ModeFamily;
+  extendedChords: boolean;
+  voicing: ChordVoicing;
+  voicingType: ChordVoicingType;
+  drop3StringGroup: 0 | 1;
+  degreeLabelMode: DegreeLabelMode;
+  keepLastPlayed: boolean;
+  sequenceDirection: SequenceDirection;
+  bpm: number;
+  playbackMode: PlaybackMode;
+  lowerString: number;
+  upperString: number;
+  chordSequence: string;
+  sequenceMode: 'diatonic' | 'linked';
+  linkedSequenceOctaveOffset: number;
+}
+
+function loadPersistedAppSettings(): Partial<PersistedAppSettings> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const saved = window.localStorage.getItem(APP_SETTINGS_STORAGE_KEY);
+    if (!saved) return {};
+    const parsed: unknown = JSON.parse(saved);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    return parsed as Partial<PersistedAppSettings>;
+  } catch {
+    return {};
+  }
+}
+
+const persistedAppSettings = loadPersistedAppSettings();
 
 function getChordIntervalLabels(chord: DiatonicChord | undefined): string[] {
   if (!chord) return [];
@@ -116,6 +196,51 @@ function getChordIntervalLabels(chord: DiatonicChord | undefined): string[] {
     const interval = ((tone.pitch - chord.rootPitch) % 12 + 12) % 12;
     return CHORD_INTERVAL_LABELS[interval];
   });
+}
+
+function getVoicingRootIndex(chord: DiatonicChord, voicing: ChordVoicing): number {
+  return toVoicing(chord, voicing).tones.findIndex((tone) => tone.role === 'root');
+}
+
+function getVoicingRootMidi(chord: DiatonicChord, voicing: ChordVoicing, noteNames: string[]): number {
+  const rootIndex = getVoicingRootIndex(chord, voicing);
+  return rootIndex < 0 ? NaN : Tone.Frequency(noteNames[rootIndex]).toMidi();
+}
+
+function getVoicingRootPositionKey(chord: DiatonicChord, voicing: ChordVoicing, positions: FretboardPosition[]): string {
+  const rootPosition = positions[getVoicingRootIndex(chord, voicing)];
+  return rootPosition ? `${rootPosition.string}-${rootPosition.fret}` : '';
+}
+
+function getPhysicalInversion(chord: DiatonicChord, positions: FretboardPosition[]): number {
+  const lowestPosition = positions[0];
+  if (!lowestPosition) return 1;
+  const lowestTone = chord.tones.find((tone) => tone.pitch === lowestPosition.pitch);
+  if (!lowestTone) return 1;
+  return lowestTone.role === 'root'
+    ? 1
+    : lowestTone.role === 'third'
+      ? 2
+      : lowestTone.role === 'fifth'
+        ? 3
+        : 4;
+}
+
+function isClosedPitchRange(noteNames: string[]): boolean {
+  const midis = noteNames.map((note) => Tone.Frequency(note).toMidi());
+  return midis.length > 0 && Math.max(...midis) - Math.min(...midis) < 12;
+}
+
+function isSameOrAdjacentStringGroup(
+  lower: number,
+  upper: number,
+  priorLower: number,
+  priorUpper: number
+): boolean {
+  const lowerDelta = Math.abs(lower - priorLower);
+  const upperDelta = Math.abs(upper - priorUpper);
+  return lowerDelta === 0 && upperDelta === 0
+    || lowerDelta === 1 && upperDelta === 1;
 }
 
 function getArpeggioPositions(
@@ -283,30 +408,276 @@ function getArpeggioPositions(
   };
 }
 
+interface GlobalLinkedCandidate {
+  positions: FretboardPosition[];
+  noteNames: string[];
+  midis: number[];
+  rootMidi: number;
+  rootPositionKey: string;
+  tonePositionKeys: Record<number, string>;
+  inversion: number;
+  bassToneRole: string;
+  lower: number;
+  upper: number;
+  selected: boolean;
+}
+
+function getAllPhysicalVoicingPositions(
+  chord: DiatonicChord,
+  lower: number,
+  upper: number,
+  selectedStrings: number[] | undefined,
+  voicingType: ChordVoicingType,
+  enforceFretSpan = true,
+  enforceSpread = true
+): FretboardPosition[][] {
+  const strings = selectedStrings ?? Array.from(
+    { length: lower - upper + 1 },
+    (_, index) => lower - index
+  );
+  const positionsByTone = chord.tones.map((tone, toneIndex) => getAllPositionsForPitch(tone.pitch, MAX_FRETBOARD_FRET)
+    .filter((position) => position.string === strings[toneIndex]));
+  const results: FretboardPosition[][] = [];
+  const visit = (toneIndex: number, positions: FretboardPosition[]) => {
+    if (toneIndex === positionsByTone.length) {
+      const midis = positions.map((position) => Tone.Frequency(
+        fretToNoteName(position.string - 1, position.fret)
+      ).toMidi());
+      const frets = positions.map((position) => position.fret);
+      if (enforceFretSpan && Math.max(...frets) - Math.min(...frets) > MAX_VOICING_FRET_SPAN) return;
+      if (!midis.every((midi, index) => index === 0 || midi > midis[index - 1])) return;
+      if (enforceSpread && voicingType !== 'closed' && isClosedPitchRange(positions.map((position) => (
+        fretToNoteName(position.string - 1, position.fret)
+      )))) return;
+      results.push(positions);
+      return;
+    }
+    for (const position of positionsByTone[toneIndex]) {
+      visit(toneIndex + 1, [...positions, position]);
+    }
+  };
+  visit(0, []);
+  return results;
+}
+
+function findGlobalLinkedPath(
+  linkedChordSequence: ReturnType<typeof linkChordSequence>,
+  extendedChords: boolean,
+  requestedVoicingType: ChordVoicingType,
+  initialVoicing: ChordVoicing,
+  lowerString: number,
+  upperString: number,
+  drop3StringGroup: 0 | 1
+): ProgressionStep[] | null {
+  if (linkedChordSequence.length === 0) return null;
+  const voicingType: ChordVoicingType = extendedChords && requestedVoicingType === 'closed'
+    ? 'drop2'
+    : requestedVoicingType;
+  const voiceCount = extendedChords ? 4 : 3;
+  const requestedInitialInversion = initialVoicing === 'closed'
+    ? 1
+    : Math.min(extendedChords ? 4 : 3, Math.max(1, Number(initialVoicing.at(-1))));
+  const contexts = voicingType === 'drop3'
+    ? [{ lower: 6, upper: 2, selected: drop3StringGroup === 0 }, { lower: 5, upper: 1, selected: drop3StringGroup === 1 }]
+    : Array.from({ length: 6 - voiceCount + 1 }, (_, index) => ({
+      lower: 6 - index,
+      upper: 6 - index - voiceCount + 1,
+      selected: 6 - index === lowerString && 6 - index - voiceCount + 1 === upperString,
+    }));
+  const layers: GlobalLinkedCandidate[][] = [];
+
+  for (const [index, currentLinkedStep] of linkedChordSequence.entries()) {
+    if (!currentLinkedStep.chord || currentLinkedStep.targetInversion === null) return null;
+    const inversionCount = extendedChords ? 4 : 3;
+    const followsChromaticStep = index > 0 && linkedChordSequence[index - 1].linkStatus === 'chromatic';
+    const inversions = index === 0
+      ? [requestedInitialInversion]
+      : currentLinkedStep.linkStatus === 'chromatic' || followsChromaticStep
+        ? Array.from({ length: inversionCount }, (_, inversionIndex) => inversionIndex + 1)
+        : [currentLinkedStep.targetInversion];
+    const candidates: GlobalLinkedCandidate[] = [];
+    for (const inversion of inversions) {
+      const candidateVoicing: ChordVoicing = voicingType === 'closed'
+        ? inversion === 1 ? 'closed' : `closed-${inversion}` as ChordVoicing
+        : `${voicingType}-${inversion}` as ChordVoicing;
+      for (const context of contexts) {
+        const bases = getAllPhysicalVoicingPositions(
+          toVoicing(currentLinkedStep.chord, candidateVoicing),
+          context.lower,
+          context.upper,
+          voicingType === 'drop3' ? getDrop3StringSet(context.lower === 6 ? 0 : 1) : undefined,
+          voicingType
+        ).map((positions) => ({ positions }));
+        for (const base of bases) {
+          for (const octave of [-24, -12, 0, 12, 24]) {
+          const positions = base.positions.map((position) => ({ ...position, fret: position.fret + octave }));
+          if (positions.some((position) => position.fret < 0 || position.fret > MAX_FRETBOARD_FRET)) continue;
+          const noteNames = positions.map((position) => fretToNoteName(position.string - 1, position.fret));
+          const tonePositionKeys = Object.fromEntries(
+            toVoicing(currentLinkedStep.chord, candidateVoicing).tones.map((tone, toneIndex) => [
+              tone.pitch,
+              `${positions[toneIndex].string}-${positions[toneIndex].fret}`,
+            ])
+          );
+          if (voicingType !== 'closed' && isClosedPitchRange(noteNames)) continue;
+          const midis = noteNames.map((note) => Tone.Frequency(note).toMidi());
+          if (Math.max(...midis) - Math.min(...midis) > 24) continue;
+          candidates.push({
+            positions,
+            noteNames,
+            midis,
+            rootMidi: getVoicingRootMidi(currentLinkedStep.chord, candidateVoicing, noteNames),
+            rootPositionKey: getVoicingRootPositionKey(currentLinkedStep.chord, candidateVoicing, positions),
+            tonePositionKeys,
+            inversion,
+            bassToneRole: toVoicing(currentLinkedStep.chord, candidateVoicing).tones[0]?.role ?? '',
+            lower: context.lower,
+            upper: context.upper,
+            selected: context.selected,
+          });
+        }
+      }
+    }
+    }
+    if (candidates.length === 0) return null;
+    layers.push(candidates);
+  }
+
+  const solveLayers = (allowAlternativeStart: boolean) => {
+    const costs = layers.map((layer) => layer.map(() => Infinity));
+    const previous = layers.map((layer) => layer.map(() => -1));
+    layers[0].forEach((candidate, index) => {
+      costs[0][index] = candidate.selected || allowAlternativeStart
+        ? 0
+        : Infinity;
+    });
+  for (let layerIndex = 1; layerIndex < layers.length; layerIndex += 1) {
+    layers[layerIndex].forEach((candidate, candidateIndex) => {
+      layers[layerIndex - 1].forEach((prior, priorIndex) => {
+        if (candidate.midis.length !== prior.midis.length) return;
+        const sameStringGroup = candidate.lower === prior.lower && candidate.upper === prior.upper;
+        const isChromaticTransition = linkedChordSequence[layerIndex].linkStatus === 'chromatic'
+          || linkedChordSequence[layerIndex - 1].linkStatus === 'chromatic';
+        const sameGroupHasViableCandidate = layers[layerIndex].some((sameGroupCandidate) => (
+          sameGroupCandidate.lower === prior.lower
+          && sameGroupCandidate.upper === prior.upper
+          && (isChromaticTransition
+            ? Math.abs(
+              getPhysicalInversion(linkedChordSequence[layerIndex].chord!, sameGroupCandidate.positions)
+                - getPhysicalInversion(linkedChordSequence[layerIndex - 1].chord!, prior.positions)
+            ) <= 1
+            : true)
+          && sameGroupCandidate.midis.every((midi, voiceIndex) => (
+            Math.abs(midi - prior.midis[voiceIndex]) <= MAX_LINK_VOICE_JUMP
+          ))
+        ));
+        if (!sameStringGroup && sameGroupHasViableCandidate) return;
+        if (!sameStringGroup && (
+          candidate.inversion !== prior.inversion
+          || candidate.bassToneRole !== prior.bassToneRole
+        )) return;
+        const sharedPitches = Object.keys(candidate.tonePositionKeys)
+          .map(Number)
+          .filter((pitch) => Object.hasOwn(prior.tonePositionKeys, pitch));
+        const voiceMovement = candidate.midis.reduce((sum, midi, voiceIndex) => sum + Math.abs(midi - prior.midis[voiceIndex]), 0);
+        if (candidate.midis.some((midi, voiceIndex) => (
+          Math.abs(midi - prior.midis[voiceIndex]) > MAX_LINK_VOICE_JUMP
+        ))) return;
+        if (!isSameOrAdjacentStringGroup(candidate.lower, candidate.upper, prior.lower, prior.upper)) return;
+        const commonTonesRemainStatic = sharedPitches.every((pitch) => {
+          const [priorString, priorFret] = prior.tonePositionKeys[pitch].split('-').map(Number);
+          const [candidateString, candidateFret] = candidate.tonePositionKeys[pitch].split('-').map(Number);
+          return Tone.Frequency(fretToNoteName(priorString - 1, priorFret)).toMidi()
+            === Tone.Frequency(fretToNoteName(candidateString - 1, candidateFret)).toMidi();
+        });
+        if (!commonTonesRemainStatic) return;
+        const cost = costs[layerIndex - 1][priorIndex] + voiceMovement;
+        if (cost < costs[layerIndex][candidateIndex]) {
+          costs[layerIndex][candidateIndex] = cost;
+          previous[layerIndex][candidateIndex] = priorIndex;
+        }
+      });
+    });
+  }
+  const finalCosts = costs.at(-1);
+  if (!finalCosts || finalCosts.length === 0 || !finalCosts.some(Number.isFinite)) return null;
+  let selectedIndex = finalCosts.reduce((best, cost, index, row) => cost < row[best] ? index : best, 0);
+  const selected: GlobalLinkedCandidate[] = [];
+  for (let layerIndex = layers.length - 1; layerIndex >= 0; layerIndex -= 1) {
+    const candidate = layers[layerIndex][selectedIndex];
+    if (!candidate) return null;
+    selected.unshift(candidate);
+    if (layerIndex === 0) break;
+    selectedIndex = previous[layerIndex][selectedIndex];
+    if (selectedIndex < 0) return null;
+  }
+  return selected;
+  };
+  const selected = solveLayers(false) ?? solveLayers(true);
+  if (!selected) return null;
+  return selected.map((candidate, index) => {
+    const noteNames = candidate.positions.map((position) => fretToNoteName(position.string - 1, position.fret));
+    return {
+      id: `global-linked-${index}`,
+      label: linkedChordSequence[index].chord?.romanLabel ?? linkedChordSequence[index].token.input,
+      inversion: candidate.inversion,
+      noteNames,
+      positionKeys: candidate.positions.map((position) => `${position.string}-${position.fret}`),
+      positions: candidate.positions,
+      stringGroup: `${candidate.lower}-${candidate.upper}`,
+      pitches: linkedChordSequence[index].chord?.tones.map((tone) => tone.pitch) ?? [],
+    };
+  });
+}
+
 function App(): JSX.Element {
   const appShellRef = useRef<HTMLElement>(null);
-  const { unlock, playNote, playChord, isMuted, toggleMuted } = useAudioEngine();
-  const [key, setKey] = useState<KeyName>('C');
-  const [modeBaseKey, setModeBaseKey] = useState<KeyName>('C');
-  const [scaleId, setScaleId] = useState('ionian');
-  const [degree, setDegree] = useState(1);
-  const [modeDegree, setModeDegree] = useState(1);
-  const [modeFamily, setModeFamily] = useState<ModeFamily>('major');
-  const [extendedChords, setExtendedChords] = useState(false);
-  const [voicing, setVoicing] = useState<ChordVoicing>('closed');
-  const [voicingType, setVoicingType] = useState<ChordVoicingType>('closed');
-  const [drop3StringGroup, setDrop3StringGroup] = useState<0 | 1>(0);
-  const [degreeLabelMode, setDegreeLabelMode] = useState<DegreeLabelMode>('roman');
+  const { unlock, playNote, playChord, playPreviewChord, stopAll, isMuted, toggleMuted } = useAudioEngine();
+  const { language, t } = useLanguage();
+  const initialExtendedChords = persistedAppSettings.extendedChords ?? false;
+  const initialSequenceMode = persistedAppSettings.sequenceMode === 'linked'
+    && persistedAppSettings.chordSequence?.trim()
+    ? 'linked'
+    : 'diatonic';
+  const startsLinkedTetradSequence = initialSequenceMode === 'linked' && initialExtendedChords;
+  const [key, setKey] = useState<KeyName>(persistedAppSettings.key ?? 'C');
+  const [useEnharmonicTonicName, setUseEnharmonicTonicName] = useState(persistedAppSettings.useEnharmonicTonicName ?? false);
+  const [modeBaseKey, setModeBaseKey] = useState<KeyName>(persistedAppSettings.modeBaseKey ?? 'C');
+  const [scaleId, setScaleId] = useState(persistedAppSettings.scaleId ?? 'ionian');
+  const [degree, setDegree] = useState(persistedAppSettings.degree ?? 1);
+  const [modeDegree, setModeDegree] = useState(persistedAppSettings.modeDegree ?? 1);
+  const [modeFamily, setModeFamily] = useState<ModeFamily>(persistedAppSettings.modeFamily ?? 'major');
+  const [extendedChords, setExtendedChords] = useState(initialExtendedChords);
+  const [voicing, setVoicing] = useState<ChordVoicing>(
+    startsLinkedTetradSequence && persistedAppSettings.voicingType === 'closed'
+      ? 'drop2-1'
+      : persistedAppSettings.voicing ?? 'closed'
+  );
+  const [voicingType, setVoicingType] = useState<ChordVoicingType>(
+    startsLinkedTetradSequence && persistedAppSettings.voicingType === 'closed'
+      ? 'drop2'
+      : persistedAppSettings.voicingType ?? 'closed'
+  );
+  const [drop3StringGroup, setDrop3StringGroup] = useState<0 | 1>(persistedAppSettings.drop3StringGroup ?? 0);
+  const [degreeLabelMode, setDegreeLabelMode] = useState<DegreeLabelMode>(persistedAppSettings.degreeLabelMode ?? 'roman');
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null);
   const [lastChordLowStringMidi, setLastChordLowStringMidi] = useState<number | null>(null);
   const [lastChordPositionKeys, setLastChordPositionKeys] = useState<string[] | null>(null);
   const [lastChordVoiceMidis, setLastChordVoiceMidis] = useState<number[] | null>(null);
+  const lastPlayedProgressionStepRef = useRef<ProgressionStep | null>(null);
   const chordHighlightTimerRef = useRef<number | null>(null);
   const [playingChordLabel, setPlayingChordLabel] = useState<string | null>(null);
-  const [keepLastPlayed, setKeepLastPlayed] = useState(true);
+  const [keepLastPlayed, setKeepLastPlayed] = useState(persistedAppSettings.keepLastPlayed ?? true);
   const [isSequencePlaying, setIsSequencePlaying] = useState(false);
-  const [sequenceDirection, setSequenceDirection] = useState<SequenceDirection>('ascending');
+  const [linkedSequenceOctaveOffset, setLinkedSequenceOctaveOffset] = useState(
+    persistedAppSettings.linkedSequenceOctaveOffset ?? 0
+  );
+  const [sequenceDirection, setSequenceDirection] = useState<SequenceDirection>(persistedAppSettings.sequenceDirection ?? 'ascending');
+  const [bpm, setBpm] = useState(persistedAppSettings.bpm ?? 90);
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(persistedAppSettings.playbackMode ?? 'chord');
+  const [chordSequence, setChordSequence] = useState(persistedAppSettings.chordSequence ?? '');
+  const [sequenceMode, setSequenceMode] = useState<'diatonic' | 'linked'>(initialSequenceMode);
 
   useEffect(() => {
     const shell = appShellRef.current;
@@ -350,29 +721,63 @@ function App(): JSX.Element {
   const signatureNotation = getKeySignatureNotation(modeBaseKey, modeFamily);
   const signatureLabel = getKeySignatureLabel(modeBaseKey, modeFamily);
   const effectiveNotation = signatureNotation;
-  const [lowerString, setLowerString] = useState(6);
-  const [upperString, setUpperString] = useState(4);
+  const [lowerString, setLowerString] = useState(persistedAppSettings.lowerString ?? 6);
+  const [upperString, setUpperString] = useState(persistedAppSettings.upperString ?? 4);
+
+  useEffect(() => {
+    const settings: PersistedAppSettings = {
+      key,
+      useEnharmonicTonicName,
+      modeBaseKey,
+      scaleId,
+      degree,
+      modeDegree,
+      modeFamily,
+      extendedChords,
+      voicing,
+      voicingType,
+      drop3StringGroup,
+      degreeLabelMode,
+      keepLastPlayed,
+      sequenceDirection,
+      bpm,
+      playbackMode,
+      lowerString,
+      upperString,
+      chordSequence,
+      sequenceMode,
+      linkedSequenceOctaveOffset,
+    };
+    try {
+      window.localStorage.setItem(APP_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+    } catch {
+      // Continue normally if browser storage is unavailable.
+    }
+  }, [
+    degree, degreeLabelMode, drop3StringGroup, extendedChords, key, keepLastPlayed,
+    lowerString, modeBaseKey, modeDegree, modeFamily, scaleId, sequenceDirection,
+    upperString, useEnharmonicTonicName, voicing, voicingType, bpm, playbackMode, chordSequence, sequenceMode,
+    linkedSequenceOctaveOffset,
+  ]);
 
   const scale = useMemo(() => resolveScale(scaleId, key), [scaleId, key]);
   const modeBaseScale = useMemo(
     () => resolveScale(MODE_FAMILY_BASE_IDS[modeFamily], modeBaseKey),
     [modeBaseKey, modeFamily]
   );
-  const fundamentalChord = useMemo(
-    () => getAllDiatonicChords(modeBaseScale, extendedChords, effectiveNotation, 'roman')[0],
-    [effectiveNotation, extendedChords, modeBaseScale]
-  );
-  const modeTitle = `${key} ${getScaleById(scaleId)?.name ?? scale.scaleName}`;
+  const tonicName = getDisplayedTonicName(key, useEnharmonicTonicName);
+  const modeTitle = `${tonicName} ${localizeTheoryName(getScaleById(scaleId)?.name ?? scale.scaleName, language)}`;
   const modeFamilyIds = MODE_FAMILY_IDS[modeFamily];
   const modeDescriptions = useMemo(() => {
     return Object.fromEntries(
       modeFamilyIds.map((modeId, index) => {
         const modeRoot = modeBaseScale.notes[index];
-        const modeName = getScaleById(modeId)?.name ?? modeId;
-        return [index + 1, `${getPreferredKeyName(modeRoot, modeFamily)} ${modeName}`];
+        const modeName = localizeTheoryName(getScaleById(modeId)?.name ?? modeId, language);
+        const modeTonicName = getDisplayedTonicName(getPreferredKeyName(modeRoot, modeFamily), useEnharmonicTonicName);
+        return [index + 1, `${modeTonicName} ${modeName}`];
       })
     );
-  }, [modeBaseScale, modeFamilyIds, modeFamily]);
+  }, [language, modeBaseScale, modeFamilyIds, modeFamily, useEnharmonicTonicName]);
   const supportsChordFunctions = true;
   const chords = useMemo(
     () => getAllDiatonicChords(
@@ -382,6 +787,69 @@ function App(): JSX.Element {
       'roman'
     ),
     [scale, extendedChords, effectiveNotation]
+  );
+  const analyzedChordSequence = useMemo(
+    () => analyzeChordSequence(chordSequence, chords),
+    [chordSequence, chords]
+  );
+  const hasMixedChordTypes = useMemo(() => {
+    const types = new Set(
+      analyzedChordSequence
+        .filter((token) => token.chordSize)
+        .map((token) => token.chordSize)
+    );
+    return types.has('triad') && types.has('tetrad');
+  }, [analyzedChordSequence]);
+  const handleChordSequenceChange = useCallback((value: string) => {
+    setChordSequence(value);
+    setLinkedSequenceOctaveOffset(0);
+    const tokens = analyzeChordSequence(value, chords);
+    if (!value.trim()) {
+      setSequenceMode('diatonic');
+      return;
+    }
+    if (tokens.some((token) => token.status === 'invalid')) return;
+
+    const chordTypes = new Set(
+      tokens.filter((token) => token.quality !== null).map((token) => isExtendedChordQuality(token.quality))
+    );
+    if (chordTypes.size === 1) {
+      const nextExtendedChords = chordTypes.has(true);
+      if (nextExtendedChords !== extendedChords) {
+        setExtendedChords(nextExtendedChords);
+        setLastChordLowStringMidi(null);
+        setLowerString(6);
+        setUpperString(nextExtendedChords ? 3 : 4);
+        if (!nextExtendedChords && voicing !== 'closed') {
+          setVoicing('closed');
+          setVoicingType('closed');
+        }
+      }
+    }
+
+    const candidatePitches = Array.from({ length: 12 }, (_, pitch) => pitch as PitchClass)
+      .filter((pitch) => {
+        const candidateKey = getPreferredKeyName(pitch, modeFamily);
+        const candidateScale = resolveScale(scaleId, candidateKey);
+        const candidateChords = getAllDiatonicChords(
+          candidateScale,
+          candidateScale.category === 'pentatonic' ? false : extendedChords,
+          effectiveNotation,
+          'roman'
+        );
+        return tokens.every((token) => parseChordToken(token.input, candidateChords).status === 'diatonic');
+      });
+
+    if (candidatePitches.length !== 1 || candidatePitches[0] === KEY_TO_PITCH[key]) return;
+    const inferredKey = getPreferredKeyName(candidatePitches[0], modeFamily);
+    setKey(inferredKey);
+    setModeBaseKey(inferredKey);
+    setDegree(1);
+    setModeDegree(1);
+  }, [chords, effectiveNotation, extendedChords, key, modeFamily, scaleId, voicing]);
+  const linkedChordSequence = useMemo(
+    () => linkChordSequence(analyzedChordSequence, voicing, extendedChords),
+    [analyzedChordSequence, extendedChords, voicing]
   );
   const selectedChord = chords.find((chord) => chord.degree === degree) ?? chords[0];
   const degreePentatonic = getMajorDegreePentatonic(scale, selectedChord?.degree ?? degree);
@@ -404,16 +872,6 @@ function App(): JSX.Element {
     chordTones: chord.tones.map((tone) => tone.pitch),
     isExtended: chord.isExtended,
   }));
-  const playbackChords = useMemo(() => {
-    const voicingChords = chords.map((chord) => toVoicing(chord, voicing));
-    const passCount = Math.floor(MAX_FRETBOARD_FRET / 12) + 1;
-    const passes = Array.from({ length: passCount }, (_, pass) => pass);
-    const orderedPasses = sequenceDirection === 'descending' ? passes.reverse() : passes;
-    const orderedChords = sequenceDirection === 'descending'
-      ? [...voicingChords].reverse()
-      : voicingChords;
-    return orderedPasses.flatMap((pass) => orderedChords.map((chord) => ({ chord, pass })));
-  }, [chords, sequenceDirection, voicing]);
   const progressionSteps = useMemo(() => {
     const steps: ProgressionStep[] = [];
     let previousLowStringMidi = -Infinity;
@@ -436,7 +894,7 @@ function App(): JSX.Element {
           previousLowStringMidi,
           false,
           false,
-          MAX_VOICING_FRET_SPAN,
+          voicingType === 'closed' ? MAX_VOICING_FRET_SPAN : undefined,
           sequenceDirection === 'ascending',
           chordIndex === 0,
           previousVoiceMidis,
@@ -499,10 +957,133 @@ function App(): JSX.Element {
 
     return steps;
   }, [activeStringSet, chords, lowerString, sequenceDirection, upperString, voicing]);
+  const globallyLinkedProgressionSteps = useMemo(
+    () => findGlobalLinkedPath(
+      linkedChordSequence,
+      extendedChords,
+      voicingType,
+      voicing,
+      lowerString,
+      upperString,
+      drop3StringGroup
+    ),
+    [drop3StringGroup, extendedChords, linkedChordSequence, lowerString, upperString, voicing, voicingType]
+  );
+  const octavedGlobalLinkedProgressionSteps = useMemo(() => {
+    if (!globallyLinkedProgressionSteps) return null;
+    const offset = linkedSequenceOctaveOffset * 12;
+    const shifted = globallyLinkedProgressionSteps.map((step, stepIndex) => {
+      const octaveChord = linkedChordSequence[stepIndex]?.chord;
+      const positions = step.positions.map((position) => {
+        const shiftedFret = position.fret + offset;
+        if (shiftedFret >= 0 && shiftedFret <= MAX_FRETBOARD_FRET) {
+          return { ...position, fret: shiftedFret };
+        }
+        return null;
+      });
+      if (positions.some((position) => position === null)) {
+        return { ...step };
+      }
+      const resolvedPositions = positions as FretboardPosition[];
+      const resolvedMidis = resolvedPositions.map((position) => Tone.Frequency(
+        fretToNoteName(position.string - 1, position.fret)
+      ).toMidi());
+      const distinctStrings = new Set(resolvedPositions.map((position) => position.string)).size
+        === resolvedPositions.length;
+      const resolvedStringSet = new Set(resolvedPositions.map((position) => position.string));
+      const validDrop2Group = voicingType === 'drop2'
+        ? [[6, 5, 4, 3], [5, 4, 3, 2], [4, 3, 2, 1]].some((group) => (
+          group.length === resolvedStringSet.size && group.every((string) => resolvedStringSet.has(string))
+        ))
+        : true;
+      const ascendingVoices = resolvedMidis.every((midi, index) => index === 0 || midi > resolvedMidis[index - 1]);
+      if (!distinctStrings || !validDrop2Group || !ascendingVoices) return { ...step };
+      return {
+        ...step,
+        inversion: getPhysicalInversion(octaveChord, resolvedPositions),
+        positions: resolvedPositions,
+        noteNames: resolvedPositions.map((position) => fretToNoteName(position.string - 1, position.fret)),
+        positionKeys: resolvedPositions.map((position) => `${position.string}-${position.fret}`),
+      };
+    });
+    return shifted.map((step) => ({
+      ...step,
+      stringGroup: `${Math.max(...step.positions.map((position) => position.string))}-${Math.min(...step.positions.map((position) => position.string))}`,
+    }));
+  }, [globallyLinkedProgressionSteps, linkedSequenceOctaveOffset]);
+  const activeProgressionSteps = useMemo(() => {
+    return sequenceMode === 'linked'
+      ? octavedGlobalLinkedProgressionSteps ?? globallyLinkedProgressionSteps ?? []
+      : progressionSteps;
+  }, [globallyLinkedProgressionSteps, octavedGlobalLinkedProgressionSteps, progressionSteps, sequenceMode]);
+  const activePlaybackStep = activeStepIndex === null
+    ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
+    : activeProgressionSteps[activeStepIndex] ?? null;
+  const activePlaybackChordToneSet = useMemo(() => (
+    activePlaybackStep?.pitches ? new Set(activePlaybackStep.pitches) : chordToneSet
+  ), [activePlaybackStep, chordToneSet]);
+  const activePlaybackStepIndex = activeStepIndex ?? (sequenceMode === 'linked' ? 0 : -1);
+  const activePlaybackIsNonDiatonic = sequenceMode === 'linked'
+    && activePlaybackStepIndex >= 0
+    && linkedChordSequence[activePlaybackStepIndex]?.token.status !== 'diatonic';
+  const hideLinkedFundamentalMarkers = sequenceMode === 'linked';
+  const activePlaybackVoicing = activePlaybackStep?.inversion
+    ? voicingType === 'closed'
+      ? activePlaybackStep.inversion === 1 ? 'closed' : `closed-${activePlaybackStep.inversion}` as ChordVoicing
+      : `${voicingType}-${activePlaybackStep.inversion}` as ChordVoicing
+    : undefined;
+  const canExportSequence = sequenceMode === 'diatonic' || (!hasMixedChordTypes && octavedGlobalLinkedProgressionSteps !== null);
+  const linkedSequenceUnavailable = sequenceMode === 'linked'
+    && chordSequence.trim().length > 0
+    && globallyLinkedProgressionSteps === null;
+  const sequenceDiagramSteps = useMemo<FretboardDiagramStep[]>(() => {
+    if (activeProgressionSteps.length === 0) return [];
+    return activeProgressionSteps.map((step, index) => {
+      const linkedChord = sequenceMode === 'linked' ? linkedChordSequence[index]?.chord : null;
+      const chord = linkedChord ?? chords.find((candidate) => candidate.romanLabel === step.label);
+      const frets = step.positions.map((position) => position.fret);
+      const zoneStartFret = Math.min(...frets);
+      const zoneEndFret = Math.max(...frets) + 1;
+      return {
+      label: step.label ?? step.id,
+      chordName: chord ? getDisplayedChordSymbol(chord, useEnharmonicTonicName) : undefined,
+      inversion: step.inversion,
+      delta: linkedChordSequence[index]?.delta ?? null,
+      positions: step.positions,
+      pitches: step.pitches,
+      rootPitch: chord?.rootPitch,
+      zoneStartFret,
+      zoneEndFret,
+      };
+    });
+  }, [activeProgressionSteps, chords, linkedChordSequence, sequenceMode, useEnharmonicTonicName]);
+  const currentVoicingPositionKeys = useMemo(() => {
+    if (!selectedChord) return [];
+    const result = getArpeggioPositions(
+      toVoicing(selectedChord, voicing),
+      lowerString,
+      upperString,
+      voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup) : undefined,
+      0,
+      -Infinity,
+      false,
+      false,
+      MAX_VOICING_FRET_SPAN,
+      true,
+      voicing.startsWith('drop3'),
+      []
+    );
+    return result ? result.positions.map((position) => `${position.string}-${position.fret}`) : [];
+  }, [drop3StringGroup, lowerString, selectedChord, upperString, voicing, voicingType]);
   const highlightedPositions = useMemo(() => {
-    const activeStep = activeStepIndex === null ? null : progressionSteps[activeStepIndex];
+    if (sequenceMode === 'linked' && !isSequencePlaying && lastChordPositionKeys) {
+      return new Set(lastChordPositionKeys);
+    }
+    const activeStep = activeStepIndex === null
+      ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
+      : activeProgressionSteps[activeStepIndex];
     if (!activeStep) {
-      return new Set(lastChordPositionKeys ?? []);
+      return new Set(lastChordPositionKeys ?? currentVoicingPositionKeys);
     }
 
     const activePositionKeys = activeNoteIndex === null
@@ -512,7 +1093,7 @@ function App(): JSX.Element {
     return new Set(
       activePositionKeys
     );
-  }, [activeNoteIndex, activeStepIndex, lastChordPositionKeys, progressionSteps]);
+  }, [activeNoteIndex, activeProgressionSteps, activeStepIndex, currentVoicingPositionKeys, isSequencePlaying, lastChordPositionKeys, sequenceMode]);
   const playingTabPositions = useMemo(() => {
     if (lastChordPositionKeys) {
       return lastChordPositionKeys.map((key) => {
@@ -521,9 +1102,16 @@ function App(): JSX.Element {
       });
     }
 
-    const activeStep = activeStepIndex === null ? null : progressionSteps[activeStepIndex];
-    return activeStep?.positions ?? [];
-  }, [activeStepIndex, lastChordPositionKeys, progressionSteps]);
+    const activeStep = activeStepIndex === null
+      ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
+      : activeProgressionSteps[activeStepIndex];
+    if (activeStep) return activeStep.positions;
+    if (currentVoicingPositionKeys.length === 0) return [];
+    return currentVoicingPositionKeys.map((key) => {
+      const [string, fret] = key.split('-').map(Number);
+      return { string, fret };
+    });
+  }, [activeProgressionSteps, activeStepIndex, currentVoicingPositionKeys, lastChordPositionKeys, sequenceMode]);
 
   const scheduleChordHighlightClear = useCallback(() => {
     if (chordHighlightTimerRef.current !== null) {
@@ -546,21 +1134,33 @@ function App(): JSX.Element {
     searchAscending = true,
     previousVoices: number[] = []
   ) => {
+    const previewChord = sequenceMode === 'linked'
+      ? linkedChordSequence[activeStepIndex ?? 0]?.chord ?? selectedChord
+      : selectedChord;
     setVoicing(nextVoicing);
     setLastChordLowStringMidi(null);
     setLastChordPositionKeys(null);
     setLastChordVoiceMidis(null);
     setPlayingChordLabel(null);
-    if (!preserveSequence) {
-      setActiveStepIndex(null);
+    if (sequenceMode === 'linked' && !preserveSequence) {
+      setActiveStepIndex(0);
       setActiveNoteIndex(null);
     }
+    if (!preserveSequence) {
+      if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+        setActiveStepIndex(0);
+        setActiveNoteIndex(null);
+      } else {
+        setActiveStepIndex(null);
+        setActiveNoteIndex(null);
+      }
+    }
 
-    if (selectedChord) {
+    if (previewChord) {
       const nextStringSet = stringSetOverride
         ?? (nextVoicing.startsWith('drop3') ? getDrop3StringSet(drop3StringGroup) : undefined);
       const result = getArpeggioPositions(
-        toVoicing(selectedChord, nextVoicing),
+        toVoicing(previewChord, nextVoicing),
         lowerString,
         upperString,
         nextStringSet,
@@ -577,14 +1177,18 @@ function App(): JSX.Element {
       if (result) {
         setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
         setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(selectedChord.symbol);
-        if (playSound) playChord(result.noteNames);
+        setPlayingChordLabel(getDisplayedChordSymbol(previewChord, useEnharmonicTonicName));
+        if (playSound) playPreviewChord(result.noteNames);
         scheduleChordHighlightClear();
       }
     }
-  }, [drop3StringGroup, lowerString, playChord, scheduleChordHighlightClear, selectedChord, upperString]);
+  }, [activeProgressionSteps.length, activeStepIndex, drop3StringGroup, linkedChordSequence, lowerString, playPreviewChord, scheduleChordHighlightClear, selectedChord, sequenceMode, upperString, useEnharmonicTonicName]);
 
   const handleInversionStep = (direction: 1 | -1) => {
+    stopAll();
+    const previewChord = sequenceMode === 'linked'
+      ? linkedChordSequence[activeStepIndex ?? 0]?.chord ?? selectedChord
+      : selectedChord;
     const currentPosition = voicing === 'closed' ? 1 : Number(voicing.at(-1));
     const inversionCount = extendedChords ? 4 : 3;
     const wrapsForward = direction > 0 && currentPosition === inversionCount;
@@ -593,9 +1197,9 @@ function App(): JSX.Element {
     if (nextPosition > inversionCount) nextPosition = 1;
     if (nextPosition < 1) nextPosition = inversionCount;
 
-    const currentResult = selectedChord
+    const currentResult = previewChord
       ? getArpeggioPositions(
-        toVoicing(selectedChord, voicing),
+        toVoicing(previewChord, voicing),
         lowerString,
         upperString,
         activeStringSet,
@@ -608,10 +1212,14 @@ function App(): JSX.Element {
         voicing.startsWith('drop3')
       )
       : null;
-    const previousLowMidi = lastChordLowStringMidi ?? currentResult?.lowStringMidi ?? -Infinity;
-    const previousVoices = lastChordVoiceMidis
-      ?? currentResult?.noteNames.map((note) => Tone.Frequency(note).toMidi())
-      ?? [];
+    const previousLowMidi = wrapsForward || wrapsBackward
+      ? -Infinity
+      : lastChordLowStringMidi ?? currentResult?.lowStringMidi ?? -Infinity;
+    const previousVoices = wrapsForward || wrapsBackward
+      ? []
+      : lastChordVoiceMidis
+        ?? currentResult?.noteNames.map((note) => Tone.Frequency(note).toMidi())
+        ?? [];
 
     if (voicingType === 'drop3') {
       handleVoicingChange(
@@ -680,12 +1288,25 @@ function App(): JSX.Element {
         lastChordVoiceMidis
           ?? previousResult?.noteNames.map((note) => Tone.Frequency(note).toMidi())
           ?? []
+      ) ?? getArpeggioPositions(
+        toVoicing(nextChord, voicing),
+        lowerString,
+        upperString,
+        activeStringSet,
+        0,
+        -Infinity,
+        false,
+        false,
+        MAX_VOICING_FRET_SPAN,
+        true,
+        voicing.startsWith('drop3'),
+        []
       );
       if (result) {
         setLastChordLowStringMidi(result.lowStringMidi);
         setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
         setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(nextChord.symbol);
+        setPlayingChordLabel(getDisplayedChordSymbol(nextChord, useEnharmonicTonicName));
         playChord(result.noteNames);
         scheduleChordHighlightClear();
       } else {
@@ -702,6 +1323,10 @@ function App(): JSX.Element {
     setLastChordLowStringMidi(null);
     setLowerString(6);
     setUpperString(enabled ? 3 : 4);
+    if (enabled && sequenceMode === 'linked' && voicingType === 'closed') {
+      setVoicingType('drop2');
+      setVoicing('drop2-1');
+    }
     if (!enabled && voicing !== 'closed') {
       setVoicing('closed');
       setVoicingType('closed');
@@ -710,31 +1335,55 @@ function App(): JSX.Element {
 
   const handleStepChange = useCallback((index: number | null) => {
     setActiveStepIndex(index);
-    if (index !== null && playbackChords[index]) {
-      setDegree(playbackChords[index].chord.degree);
-      setPlayingChordLabel(playbackChords[index].chord.symbol);
+    if (index !== null && activeProgressionSteps[index]) {
+      const step = activeProgressionSteps[index];
+      lastPlayedProgressionStepRef.current = step;
+      const linkedChord = sequenceMode === 'linked' ? linkedChordSequence[index]?.chord : null;
+      const chord = linkedChord ?? chords.find((candidate) => candidate.romanLabel === step.label);
+      if (chord) {
+        setPlayingChordLabel(getDisplayedChordSymbol(chord, useEnharmonicTonicName));
+      }
     } else {
-      setPlayingChordLabel(null);
+      const lastPlayedIndex = lastPlayedProgressionStepRef.current
+        ? activeProgressionSteps.indexOf(lastPlayedProgressionStepRef.current)
+        : -1;
+      if (lastPlayedIndex >= 0) {
+        setActiveStepIndex(lastPlayedIndex);
+      }
+      setPlayingChordLabel(lastPlayedProgressionStepRef.current?.label ?? null);
     }
-  }, [playbackChords]);
+  }, [activeProgressionSteps, chords, linkedChordSequence, sequenceMode, useEnharmonicTonicName]);
 
   const handleSequencePlayingChange = useCallback((isPlaying: boolean) => {
     setIsSequencePlaying(isPlaying);
     if (isPlaying) {
+      lastPlayedProgressionStepRef.current = null;
       setLastChordPositionKeys(null);
       setLastChordVoiceMidis(null);
       setPlayingChordLabel(null);
     } else {
-      setActiveStepIndex(null);
-      setLastChordVoiceMidis(null);
-      if (!keepLastPlayed) {
+      const lastPlayedStep = lastPlayedProgressionStepRef.current
+        ?? (activeStepIndex === null ? null : activeProgressionSteps[activeStepIndex]);
+      if (lastPlayedStep) {
+        setLastChordPositionKeys(lastPlayedStep.positionKeys);
+        setLastChordVoiceMidis(lastPlayedStep.noteNames.map((note) => Tone.Frequency(note).toMidi()));
+        setLastChordLowStringMidi(lastPlayedStep.noteNames.length > 0
+          ? Tone.Frequency(lastPlayedStep.noteNames[0]).toMidi()
+          : null);
+        setPlayingChordLabel(lastPlayedStep.label ?? null);
+        const lastPlayedIndex = activeProgressionSteps.indexOf(lastPlayedStep);
+        setActiveStepIndex(lastPlayedIndex >= 0 ? lastPlayedIndex : null);
+      } else {
+        setActiveStepIndex(null);
+      }
+      if (!lastPlayedStep && !keepLastPlayed) {
         setLastChordPositionKeys(null);
         setPlayingChordLabel(null);
       }
     }
-  }, [keepLastPlayed]);
+  }, [activeProgressionSteps, activeStepIndex, keepLastPlayed]);
 
-  const handleDrop3StringGroupChange = useCallback((group: number) => {
+  const handleDrop3StringGroupChange = useCallback((group: 0 | 1) => {
     setDrop3StringGroup(group);
     setLastChordLowStringMidi(null);
     setLastChordPositionKeys(null);
@@ -758,12 +1407,12 @@ function App(): JSX.Element {
       if (result) {
         setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
         setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(selectedChord.symbol);
+        setPlayingChordLabel(getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName));
         playChord(result.noteNames);
         scheduleChordHighlightClear();
       }
     }
-  }, [lowerString, playChord, scheduleChordHighlightClear, selectedChord, upperString, voicing]);
+  }, [lowerString, playChord, scheduleChordHighlightClear, selectedChord, upperString, useEnharmonicTonicName, voicing]);
 
   const handleKeepLastPlayedChange = useCallback((keep: boolean) => {
     setKeepLastPlayed(keep);
@@ -773,12 +1422,18 @@ function App(): JSX.Element {
     }
   }, []);
 
-  const handleVoicingChangeSilent = useCallback((nextVoicing: ChordVoicing) => handleVoicingChange(
-    nextVoicing,
-    undefined,
-    !isSequencePlaying,
-    isSequencePlaying
-  ), [handleVoicingChange, isSequencePlaying]);
+  const handleVoicingChangeSilent = useCallback((nextVoicing: ChordVoicing) => {
+    stopAll();
+    handleVoicingChange(
+      nextVoicing,
+      undefined,
+      !isSequencePlaying,
+      isSequencePlaying,
+      -Infinity,
+      true,
+      []
+    );
+  }, [handleVoicingChange, isSequencePlaying, stopAll]);
 
   const handleNotePlay = useCallback((position: FretboardPosition) => {
     playNote(fretToNoteName(position.string - 1, position.fret));
@@ -791,6 +1446,10 @@ function App(): JSX.Element {
     setLastChordLowStringMidi(null);
     setLastChordPositionKeys(null);
     setLastChordVoiceMidis(null);
+    if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+      setActiveStepIndex(0);
+      setActiveNoteIndex(null);
+    }
     setLowerString(Math.max(nextLowerString, nextUpperString));
     setUpperString(Math.min(nextUpperString, nextLowerString));
 
@@ -813,7 +1472,7 @@ function App(): JSX.Element {
       if (result) {
         setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
         setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(selectedChord.symbol);
+        setPlayingChordLabel(getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName));
         playChord(result.noteNames);
         scheduleChordHighlightClear();
       }
@@ -829,17 +1488,60 @@ function App(): JSX.Element {
   }, [lastChordPositionKeys]);
 
   const canShiftOctave = useCallback((direction: 1 | -1) => {
+    if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+      const sourceSteps = globallyLinkedProgressionSteps ?? activeProgressionSteps;
+      const nextOffset = linkedSequenceOctaveOffset + direction;
+      return sourceSteps.every((step) => step.positions.every((position) => {
+        const nextFret = position.fret + nextOffset * 12;
+        return nextFret >= 0 && nextFret <= MAX_FRETBOARD_FRET;
+      }));
+    }
     if (!currentChordPositions || currentChordPositions.length === 0) return false;
     return currentChordPositions.every((position) => {
       const nextFret = position.fret + direction * 12;
       return nextFret >= 0 && nextFret <= MAX_FRETBOARD_FRET;
     });
-  }, [currentChordPositions]);
+  }, [activeProgressionSteps, currentChordPositions, globallyLinkedProgressionSteps, linkedSequenceOctaveOffset, sequenceMode]);
 
   const canOctaveUp = canShiftOctave(1);
   const canOctaveDown = canShiftOctave(-1);
 
+  const canMoveToAdjacentGroup = useCallback((direction: 1 | -1) => {
+    if (voicingType === 'drop3') return direction > 0 ? drop3StringGroup === 0 : drop3StringGroup === 1;
+    const nextLower = lowerString - direction;
+    const nextUpper = upperString - direction;
+    return nextLower >= 4 && nextLower <= 6 && nextUpper >= 1 && nextUpper <= 4;
+  }, [drop3StringGroup, lowerString, upperString, voicingType]);
+
+  const canUseOctaveControl = (direction: 1 | -1) => (
+    canShiftOctave(direction)
+  );
+
+  const canStringGroupUp = sequenceMode === 'linked' && activeProgressionSteps.length > 0 && canMoveToAdjacentGroup(1);
+  const canStringGroupDown = sequenceMode === 'linked' && activeProgressionSteps.length > 0 && canMoveToAdjacentGroup(-1);
+
+  const handleStringGroupStep = useCallback((direction: 1 | -1) => {
+    if (!canMoveToAdjacentGroup(direction)) return;
+    if (voicingType === 'drop3') {
+      setDrop3StringGroup(direction > 0 ? 1 : 0);
+    } else {
+      setLowerString((value) => value - direction);
+      setUpperString((value) => value - direction);
+    }
+    setLinkedSequenceOctaveOffset(0);
+    setLastChordPositionKeys(null);
+    setActiveStepIndex(0);
+  }, [canMoveToAdjacentGroup, voicingType]);
+
   const handleOctaveStep = useCallback((direction: 1 | -1) => {
+    if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+      setLastChordPositionKeys(null);
+      setLastChordVoiceMidis(null);
+      setActiveNoteIndex(null);
+      setActiveStepIndex(0);
+      setLinkedSequenceOctaveOffset((offset) => offset + direction);
+      return;
+    }
     if (!currentChordPositions || currentChordPositions.length === 0) return;
     const shiftedPositions = currentChordPositions.map((position) => ({
       string: position.string,
@@ -855,7 +1557,7 @@ function App(): JSX.Element {
     setLastChordLowStringMidi(Tone.Frequency(noteNames[0]).toMidi());
     playChord(noteNames);
     scheduleChordHighlightClear();
-  }, [currentChordPositions, playChord, scheduleChordHighlightClear]);
+  }, [activeProgressionSteps, canShiftOctave, currentChordPositions, playChord, scheduleChordHighlightClear, sequenceMode]);
 
   const handleDegreeChange = (nextDegree: number) => {
     if (nextDegree < 1 || nextDegree > 7) {
@@ -899,69 +1601,96 @@ function App(): JSX.Element {
     : 'Modo';
 
   const pdfDetails = useMemo(() => ({
-    title: `${modeTitle} - Diapasón`,
-    key: modeBaseKey,
-    scale: modeBaseScale.scaleName,
-    mode: getScaleById(scaleId)?.name ?? scale.scaleName,
-    chord: selectedChord?.symbol,
+    ...(sequenceMode === 'linked' ? {} : {
+      title: `${modeTitle} - Diapasón`,
+      key: tonicName,
+      scale: localizeTheoryName(modeBaseScale.scaleName, language),
+      mode: localizeTheoryName(getScaleById(scaleId)?.name ?? scale.scaleName, language),
+      modeFamily: getModeFamilyLabel(modeFamily),
+      modeDegree: String(modeDegree),
+    }),
+    ...(sequenceMode === 'linked' ? {} : {
+      notation: getNotationLabel(signatureLabel),
+      enharmonic: useEnharmonicTonicName ? 'Sostenidos' : 'Bemoles',
+      degree: String(degree),
+      degreeLabelMode: degreeLabelMode === 'roman' ? 'Numerales romanos' : 'Números Nashville',
+      chord: selectedChord ? getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName) : undefined,
+    }),
     chordType: extendedChords ? 'Tétrada (7)' : 'Tríada',
     inversion: String(voicing === 'closed' ? 1 : voicing.at(-1)),
-    voicing: voicing === 'closed' ? 'Cerrado' : voicing,
+    voicing: getVoicingLabel(voicingType),
     stringGroup: voicingType === 'drop3'
       ? getDrop3StringSet(drop3StringGroup).join('-')
       : `${lowerString}-${upperString}`,
+    fretRange: `0-${MAX_FRETBOARD_FRET}`,
+    ...(sequenceMode === 'linked' ? {} : {
+      sequenceDirection: getDirectionLabel(sequenceDirection),
+    }),
   }), [
-    drop3StringGroup, extendedChords, lowerString, modeBaseKey, modeBaseScale.scaleName,
-    modeTitle, scale.scaleName, scaleId, selectedChord, upperString, voicing, voicingType,
+    degree, degreeLabelMode, drop3StringGroup, extendedChords, lowerString, modeDegree,
+    language, modeBaseScale.scaleName, modeFamily, modeTitle, scale.scaleName, scaleId, selectedChord,
+    sequenceDirection, sequenceMode, signatureLabel, tonicName, upperString, useEnharmonicTonicName,
+    voicing, voicingType,
   ]);
 
-  const onExportSequencePdf = useMemo(() => {
+  const onExportSequence = useMemo(() => {
     if (!supportsChordFunctions) return undefined;
-    return () => downloadTabPdf({
-      title: modeTitle,
-      subtitle: [
-        `Tipo: ${voicingType === 'closed' ? 'Cerrado' : voicingType === 'drop2' ? 'Drop 2' : 'Drop 3'}`,
-        `Inversión: ${voicing === 'closed' ? 1 : voicing.at(-1)}`,
-        `Grupo: ${voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup).join('-') : `${lowerString}-${upperString}`}`,
-        `Trastes: 0-24`,
-        `Acordes: ${extendedChords ? 'tétradas' : 'tríadas'}`,
-      ].join(' | '),
-      steps: progressionSteps.map((step) => ({
-        label: step.label ?? step.id,
-        chordName: chords.find((chord) => chord.romanLabel === step.label)?.symbol,
-        positions: step.positions,
-      })),
-    });
+    return (format: 'pdf' | 'jpeg') => {
+      const options = {
+        subtitle: [
+          `Tipo: ${getVoicingLabel(voicingType)}`,
+          `Inversión: ${voicing === 'closed' ? 1 : voicing.at(-1)}`,
+          `Grupo: ${voicingType === 'drop3' ? getDrop3StringSet(drop3StringGroup).join('-') : `${lowerString}-${upperString}`}`,
+          `Trastes: 0-${MAX_FRETBOARD_FRET}`,
+          `Acordes: ${extendedChords ? 'tétradas' : 'tríadas'}`,
+        ].join(' | '),
+        steps: activeProgressionSteps.map((step) => ({
+          label: step.label ?? step.id,
+          chordName: (() => {
+            const chord = chords.find((candidate) => candidate.romanLabel === step.label);
+            return chord ? getDisplayedChordSymbol(chord, useEnharmonicTonicName) : undefined;
+          })(),
+            inversion: step.inversion,
+          positions: step.positions,
+        })),
+      };
+      return format === 'pdf' ? downloadTabPdf(options) : downloadTabJpeg(options);
+    };
   }, [
-    chords, drop3StringGroup, extendedChords, lowerString, modeTitle,
-    progressionSteps, supportsChordFunctions, upperString, voicing, voicingType,
+    chords, degree, degreeLabelMode, drop3StringGroup, extendedChords, lowerString,
+    activeProgressionSteps, modeBaseScale.scaleName, modeFamily, modeDegree, modeTitle,
+    language, scale.scaleName, scaleId, signatureLabel, supportsChordFunctions,
+    tonicName, upperString, useEnharmonicTonicName, voicing, voicingType,
   ]);
 
   return (
     <main ref={appShellRef} className="app-shell">
       <section className="phase-one">
         <span className="creator-credit">Creado por Juan Anderson</span>
-        <p className="eyebrow">Localizador de teoría en el diapasón de la guitarra</p>
-        <div className="title-row">
-          <h1>{modeTitle}</h1>
-          <span className="parent-scale-indicator">
-            Escala fundamental: {modeFamily === 'major'
-              ? modeBaseKey
-              : `${modeBaseKey} ${modeBaseScale.scaleName}`}
-          </span>
-          <span className="scale-interval-legend">
-            {scaleLegendLabel}: {scale.intervalLabels.join(' ')}
-          </span>
-        </div>
+        <p className="eyebrow">{t('theoryLocator')}</p>
+        {sequenceMode !== 'linked' && (
+          <div className="title-row">
+            <h1>{modeTitle}</h1>
+            <span className="parent-scale-indicator">
+              {t('scaleFundamental')}: {modeFamily === 'major'
+                ? getDisplayedTonicName(modeBaseKey, useEnharmonicTonicName)
+                  : `${getDisplayedTonicName(modeBaseKey, useEnharmonicTonicName)} ${modeBaseScale.scaleName}`}
+            </span>
+            <span className="scale-interval-legend">
+              {scaleLegendLabel}: {scale.intervalLabels.join(' ')}
+            </span>
+          </div>
+        )}
         <div className="current-state">
-          <span>{selectedChord?.symbol ?? 'Sin acorde'}</span>
-          <span>{selectedChord?.tones.map((tone) => tone.noteName).join(' - ')}</span>
-          <span>Tríada: {chordIntervalLabels.slice(0, 3).join(' - ') || 'Sin acorde'}</span>
-          <span>
-            Tétrada: {extendedChords && chordIntervalLabels.length > 3
-              ? chordIntervalLabels.join(' - ')
-              : 'desactivada'}
-          </span>
+          <span>{selectedChord ? getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName) : 'Sin acorde'}</span>
+          <span>{selectedChord?.tones.map((tone) => getDisplayedNoteName(tone.noteName, useEnharmonicTonicName)).join(' - ')}</span>
+          {extendedChords ? (
+            <span>
+              {t('tetrad')}: {chordIntervalLabels.length > 3 ? chordIntervalLabels.join(' - ') : t('noChord')}
+            </span>
+          ) : (
+            <span>{t('triad')}: {chordIntervalLabels.slice(0, 3).join(' - ') || t('noChord')}</span>
+          )}
           {degreePentatonic && (
             <span>
               Pentatónica: {degreePentatonic.intervalLabels.join(' - ')}
@@ -970,7 +1699,9 @@ function App(): JSX.Element {
         </div>
         <ControlsPanel
           rootPitch={KEY_TO_PITCH[key]}
-          preferredTonicName={modeBaseKey}
+          preferredTonicName={getDisplayedTonicName(key, useEnharmonicTonicName)}
+          useEnharmonicTonicName={useEnharmonicTonicName}
+          onTonicNamePreferenceChange={setUseEnharmonicTonicName}
           onRootPitchChange={(pitch) => {
             const nextKey = getPreferredKeyName(pitch, modeFamily);
             setLastChordLowStringMidi(null);
@@ -996,7 +1727,7 @@ function App(): JSX.Element {
           onModeFamilyChange={handleModeFamilyChange}
           showChordFunctions={supportsChordFunctions}
           diatonicChords={chordInfo}
-          fundamentalChordName={fundamentalChord?.symbol ?? modeBaseKey}
+          fundamentalChordName={modeTitle}
           notation={effectiveNotation}
           notationLabel={signatureLabel}
           extendedChords={extendedChords}
@@ -1004,11 +1735,32 @@ function App(): JSX.Element {
           onDegreeLabelModeChange={setDegreeLabelMode}
           isMuted={isMuted}
           onToggleMuted={() => { void toggleMuted(); }}
+          chordSequence={chordSequence}
+          onChordSequenceChange={handleChordSequenceChange}
+          analyzedChordSequence={analyzedChordSequence}
+          linkedChordSequence={linkedChordSequence}
+          hasMixedChordTypes={hasMixedChordTypes}
+          onClearChordSequence={() => {
+            setChordSequence('');
+            setSequenceMode('diatonic');
+          }}
+          linkedSequenceUnavailable={linkedSequenceUnavailable}
+          sequenceMode={sequenceMode}
+          onSequenceModeChange={(mode) => {
+            setSequenceMode(mode);
+            if (mode === 'linked' && extendedChords && voicingType === 'closed') {
+              setVoicingType('drop2');
+              setVoicing('drop2-1');
+            }
+            if (mode === 'linked') setLinkedSequenceOctaveOffset(0);
+          }}
         />
         {supportsChordFunctions && (
           <PlaybackControls
-            steps={progressionSteps}
-            label="Acordes diatónicos"
+            steps={activeProgressionSteps}
+            label={sequenceMode === 'linked'
+              ? (language === 'en' ? 'Linked chords' : 'Acordes enlazados')
+              : (language === 'en' ? 'Diatonic chords' : 'Acordes diatónicos')}
             onStepChange={handleStepChange}
             onNoteChange={setActiveNoteIndex}
             lowerString={lowerString}
@@ -1023,37 +1775,64 @@ function App(): JSX.Element {
             onKeepLastPlayedChange={handleKeepLastPlayedChange}
             sequenceDirection={sequenceDirection}
             onSequenceDirectionChange={setSequenceDirection}
+            bpm={bpm}
+            onBpmChange={setBpm}
+            playbackMode={playbackMode}
+            onPlaybackModeChange={setPlaybackMode}
+            displayStringGroup={activePlaybackStep?.stringGroup}
             onStringRangeChange={handleStringGroupChange}
           />
         )}
         <InversionControls
           voicing={voicing}
-          onVoicingChange={handleVoicingChange}
+          onVoicingChange={(nextVoicing) => handleVoicingChange(
+            extendedChords && sequenceMode === 'linked' && nextVoicing === 'closed'
+              ? 'drop2-1'
+              : nextVoicing
+          )}
           onVoicingChangeSilent={handleVoicingChangeSilent}
           onInversionStep={handleInversionStep}
           voicingType={voicingType}
-          onVoicingTypeChange={setVoicingType}
+          onVoicingTypeChange={(nextType) => setVoicingType(
+            extendedChords && sequenceMode === 'linked' && nextType === 'closed'
+              ? 'drop2'
+              : nextType
+          )}
           extendedChords={extendedChords}
           onExtendedChordsChange={handleExtendedChordsChange}
           onOctaveStep={handleOctaveStep}
-          canOctaveUp={canOctaveUp}
-          canOctaveDown={canOctaveDown}
+          canOctaveUp={canUseOctaveControl(1)}
+          canOctaveDown={canUseOctaveControl(-1)}
+          linkedSequenceOctaveBlocked={sequenceMode === 'linked' && activeProgressionSteps.length > 0 && !canUseOctaveControl(1) && !canUseOctaveControl(-1)}
+          closedDisabled={extendedChords && sequenceMode === 'linked'}
+          linkedStringGroupNavigation={sequenceMode === 'linked' && activeProgressionSteps.length > 0}
+          onStringGroupStep={handleStringGroupStep}
+          canStringGroupUp={canStringGroupUp}
+          canStringGroupDown={canStringGroupDown}
+          displayVoicing={isSequencePlaying ? activePlaybackVoicing : undefined}
         />
-        <h2>Diapasón</h2>
+        <h2>{t('fretboard')}</h2>
         <Fretboard
           rootPitch={KEY_TO_PITCH[key]}
-          rootIsRed={modeDegree === 1}
+          rootIsRed={sequenceMode !== 'linked' && modeDegree === 1}
           fundamentalRootPitch={KEY_TO_PITCH[modeBaseKey]}
-          chordRootPitch={selectedChord?.rootPitch}
+          chordRootPitch={sequenceMode === 'linked'
+            ? linkedChordSequence[activePlaybackStepIndex]?.chord?.rootPitch
+            : selectedChord?.rootPitch}
           scaleToneSet={scaleToneSet}
-          chordToneSet={chordToneSet}
+          chordToneSet={activePlaybackChordToneSet}
+          hideScaleTones={sequenceMode === 'linked'}
+          hideFundamentalRootRings={hideLinkedFundamentalMarkers}
+          hideFundamentalRootNotes={hideLinkedFundamentalMarkers}
+          neutralizeRootStyle={hideLinkedFundamentalMarkers}
           notation={effectiveNotation}
           highlightedPositions={highlightedPositions}
           pdfDetails={pdfDetails}
           onNotePlay={handleNotePlay}
-          hasSequenceSteps={progressionSteps.length > 0}
+            hasSequenceSteps={activeProgressionSteps.length > 0 && canExportSequence}
           isSequencePlaying={isSequencePlaying}
-          onExportSequencePdf={onExportSequencePdf}
+          onExportSequence={onExportSequence}
+            sequenceDiagramSteps={sequenceDiagramSteps}
         />
       </section>
     </main>

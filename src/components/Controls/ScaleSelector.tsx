@@ -3,10 +3,12 @@
 import React, { useMemo } from 'react';
 import type { ScaleDefinition } from '../../types';
 import { SCALE_LIBRARY } from '../../lib/theory/scales';
+import { localizeTheoryName, useLanguage } from '../../i18n';
 
 interface ScaleSelectorProps {
   value: string;
   onChange: (scaleId: string) => void;
+  muted?: boolean;
 }
 
 const CATEGORY_LABELS: Record<ScaleDefinition['category'], string> = {
@@ -21,7 +23,11 @@ const CATEGORY_LABELS: Record<ScaleDefinition['category'], string> = {
 };
 
 /** Selector único de escala, agrupado por categorías en el menú nativo. */
-export function ScaleSelector({ value, onChange }: ScaleSelectorProps): JSX.Element {
+export function ScaleSelector({ value, onChange, muted = false }: ScaleSelectorProps): JSX.Element {
+  const { language, t } = useLanguage();
+  const categoryLabels = language === 'en'
+    ? { 'major-modes': 'Major modes', 'minor-modes': 'Minor modes', pentatonic: 'Pentatonics', 'harmonic-major': 'Harmonic major', 'harmonic-minor': 'Harmonic minor', 'melodic-minor': 'Melodic minor', exotic: 'Exotic', blues: 'Blues' }
+    : CATEGORY_LABELS;
   const scaleEntries = useMemo(() => SCALE_LIBRARY, []);
   const groupedByCategory = useMemo(() => {
     const groups = new Map<ScaleDefinition['category'], ScaleDefinition[]>();
@@ -34,19 +40,19 @@ export function ScaleSelector({ value, onChange }: ScaleSelectorProps): JSX.Elem
   }, [scaleEntries]);
 
   return (
-    <div aria-label="Selector de escala">
-      <div style={legendStyle}>Escala</div>
+    <div aria-label={t('scale')} style={muted ? mutedScaleControlStyle : undefined}>
+      <div style={legendStyle}>{t('scale')}</div>
       <select
         value={value}
         onChange={(event) => onChange(event.target.value)}
         style={selectStyle}
-        aria-label="Seleccionar escala"
+        aria-label={t('scale')}
       >
         {Array.from(groupedByCategory.entries()).map(([category, scales]) => (
-          <optgroup key={category} label={CATEGORY_LABELS[category]}>
+          <optgroup key={category} label={categoryLabels[category]}>
             {scales.map((scale) => (
               <option key={scale.id} value={scale.id}>
-                {scale.name}
+                {localizeTheoryName(scale.name, language)}
               </option>
             ))}
           </optgroup>
@@ -71,4 +77,9 @@ const selectStyle: React.CSSProperties = {
   padding: '0 1.2rem',
   fontSize: '1.8rem',
   background: 'white',
+};
+
+const mutedScaleControlStyle: React.CSSProperties = {
+  opacity: 0.55,
+  filter: 'grayscale(1)',
 };

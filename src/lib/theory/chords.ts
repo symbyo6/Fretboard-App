@@ -131,10 +131,10 @@ export function toVoicing(chord: DiatonicChord, voicing: ChordVoicing): Diatonic
 
   if (voicing.startsWith('drop2') && chord.tones.length === 4) {
     const drop2Orders = [
-      [0, 2, 3, 1],
-      [1, 3, 0, 2],
       [2, 0, 1, 3],
       [3, 1, 2, 0],
+      [0, 2, 3, 1],
+      [1, 3, 0, 2],
     ];
     const order = drop2Orders[inversion] ?? drop2Orders[0];
     return { ...chord, tones: order.map((index) => chord.tones[index]) };
@@ -142,10 +142,10 @@ export function toVoicing(chord: DiatonicChord, voicing: ChordVoicing): Diatonic
 
   if (voicing.startsWith('drop3') && chord.tones.length === 4) {
     const drop3Orders = [
-      [0, 3, 1, 2],
       [1, 0, 2, 3],
       [2, 1, 3, 0],
       [3, 2, 0, 1],
+      [0, 3, 1, 2],
     ];
     const order = drop3Orders[inversion] ?? drop3Orders[0];
     return { ...chord, tones: order.map((index) => chord.tones[index]) };
