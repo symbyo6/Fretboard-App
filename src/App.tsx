@@ -662,6 +662,7 @@ function App(): JSX.Element {
   const [degreeLabelMode, setDegreeLabelMode] = useState<DegreeLabelMode>(persistedAppSettings.degreeLabelMode ?? 'roman');
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [activeNoteIndex, setActiveNoteIndex] = useState<number | null>(null);
+  const [linkedStepOverride, setLinkedStepOverride] = useState<{ index: number; step: ProgressionStep } | null>(null);
   const [lastChordLowStringMidi, setLastChordLowStringMidi] = useState<number | null>(null);
   const [lastChordPositionKeys, setLastChordPositionKeys] = useState<string[] | null>(null);
   const [lastChordVoiceMidis, setLastChordVoiceMidis] = useState<number[] | null>(null);
@@ -1016,7 +1017,12 @@ function App(): JSX.Element {
       ? octavedGlobalLinkedProgressionSteps ?? globallyLinkedProgressionSteps ?? []
       : progressionSteps;
   }, [globallyLinkedProgressionSteps, octavedGlobalLinkedProgressionSteps, progressionSteps, sequenceMode]);
-  const visibleProgressionSteps = activeProgressionSteps;
+  const visibleProgressionSteps = useMemo(() => {
+    if (!linkedStepOverride || sequenceMode !== 'linked') return activeProgressionSteps;
+    return activeProgressionSteps.map((step, index) => (
+      index === linkedStepOverride.index ? linkedStepOverride.step : step
+    ));
+  }, [activeProgressionSteps, linkedStepOverride, sequenceMode]);
   const playbackProgressionSteps = useMemo(() => (
     visibleProgressionSteps.map((step) => ({
       ...step,
@@ -1150,6 +1156,7 @@ function App(): JSX.Element {
     searchAscending = true,
     previousVoices: number[] = []
   ) => {
+    if (isSequencePlaying && !preserveSequence) return;
     const previewChord = sequenceMode === 'linked'
       ? linkedChordSequence[activeStepIndex ?? 0]?.chord ?? selectedChord
       : selectedChord;
@@ -1192,6 +1199,21 @@ function App(): JSX.Element {
 
       if (result) {
         if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+          const selectedIndex = activeStepIndex ?? 0;
+          const selectedStep = activeProgressionSteps[selectedIndex];
+          if (selectedStep) {
+            setLinkedStepOverride({
+              index: selectedIndex,
+              step: {
+                ...selectedStep,
+                inversion: nextVoicing === 'closed' ? 1 : Number(nextVoicing.at(-1)),
+                positions: result.positions,
+                noteNames: result.noteNames,
+                positionKeys: result.positions.map((position) => `${position.string}-${position.fret}`),
+                stringGroup: `${Math.max(...result.positions.map((position) => position.string))}-${Math.min(...result.positions.map((position) => position.string))}`,
+              },
+            });
+          }
           setLastChordPositionKeys(null);
           setLastChordVoiceMidis(null);
           setLastChordLowStringMidi(null);
@@ -1204,9 +1226,10 @@ function App(): JSX.Element {
         scheduleChordHighlightClear();
       }
     }
-  }, [activeProgressionSteps.length, activeStepIndex, drop3StringGroup, linkedChordSequence, lowerString, playPreviewChord, scheduleChordHighlightClear, selectedChord, sequenceMode, upperString, useEnharmonicTonicName]);
+  }, [activeProgressionSteps.length, activeStepIndex, drop3StringGroup, isSequencePlaying, linkedChordSequence, lowerString, playPreviewChord, scheduleChordHighlightClear, selectedChord, sequenceMode, upperString, useEnharmonicTonicName]);
 
   const handleInversionStep = (direction: 1 | -1) => {
+    if (isSequencePlaying) return;
     stopAll();
     const previewChord = sequenceMode === 'linked'
       ? linkedChordSequence[activeStepIndex ?? 0]?.chord ?? selectedChord
@@ -1242,6 +1265,21 @@ function App(): JSX.Element {
       : lastChordVoiceMidis
         ?? currentResult?.noteNames.map((note) => Tone.Frequency(note).toMidi())
         ?? [];
+    const useLinkedExplicitVoicingSearch = sequenceMode === 'linked';
+    const nextSearchLowMidi = useLinkedExplicitVoicingSearch || wrapsForward || wrapsBackward
+      ? -Infinity
+      : previousLowMidi;
+    const visibleStepForInversion = sequenceMode === 'linked'
+      ? visibleProgressionSteps[activeStepIndex ?? 0]
+      : null;
+    const visibleStepVoices = visibleStepForInversion?.positions.map((position) => Tone.Frequency(
+      fretToNoteName(position.string - 1, position.fret)
+    ).toMidi()) ?? [];
+    const nextSearchVoices = wrapsForward || wrapsBackward
+      ? []
+      : useLinkedExplicitVoicingSearch
+        ? visibleStepVoices
+        : previousVoices;
 
     if (voicingType === 'drop3') {
       handleVoicingChange(
@@ -1249,11 +1287,9 @@ function App(): JSX.Element {
         getDrop3StringSet(drop3StringGroup),
         !isSequencePlaying,
         isSequencePlaying,
-        wrapsForward || wrapsBackward ? -Infinity : previousLowMidi,
+        nextSearchLowMidi,
         direction > 0,
-        wrapsForward || wrapsBackward
-          ? []
-          : previousVoices
+        nextSearchVoices
       );
       return;
     }
@@ -1264,11 +1300,9 @@ function App(): JSX.Element {
       Array.from({ length: size }, (_, index) => lowerString - index),
       !isSequencePlaying,
       isSequencePlaying,
-      wrapsForward || wrapsBackward ? -Infinity : previousLowMidi,
+      nextSearchLowMidi,
       direction > 0,
-      wrapsForward || wrapsBackward
-        ? []
-        : previousVoices
+      nextSearchVoices
     );
   };
 
@@ -1357,6 +1391,7 @@ function App(): JSX.Element {
 
   const handleStepChange = useCallback((index: number | null) => {
     setActiveStepIndex(index);
+    setLinkedStepOverride(null);
     if (index !== null && activeProgressionSteps[index]) {
       const step = activeProgressionSteps[index];
       lastPlayedProgressionStepRef.current = step;
@@ -1852,6 +1887,7 @@ function App(): JSX.Element {
           onStringGroupStep={handleStringGroupStep}
           canStringGroupUp={canStringGroupUp}
           canStringGroupDown={canStringGroupDown}
+          isSequencePlaying={isSequencePlaying}
           displayVoicing={isSequencePlaying ? activePlaybackVoicing : undefined}
         />
         <h2>{t('fretboard')}</h2>

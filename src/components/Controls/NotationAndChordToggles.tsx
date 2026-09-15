@@ -26,6 +26,7 @@ export interface InversionControlsProps {
   onStringGroupStep?: (direction: 1 | -1) => void;
   canStringGroupUp?: boolean;
   canStringGroupDown?: boolean;
+  isSequencePlaying?: boolean;
   displayVoicing?: ChordVoicing;
 }
 
@@ -76,6 +77,7 @@ export function InversionControls({
   onStringGroupStep,
   canStringGroupUp = false,
   canStringGroupDown = false,
+  isSequencePlaying = false,
   displayVoicing,
 }: InversionControlsProps): JSX.Element {
   const { t } = useLanguage();
@@ -115,7 +117,7 @@ export function InversionControls({
             type="button"
             role="radio"
             aria-checked={(displayVoicing ? visibleVoicing.startsWith(type) : voicingType === type)}
-            disabled={type === 'closed' ? closedDisabled : !extendedChords}
+            disabled={isSequencePlaying || (type === 'closed' ? closedDisabled : !extendedChords)}
             onClick={() => handleVoicingTypeChange(type)}
             style={{
               ...voicingTypeButtonStyle,
@@ -130,7 +132,7 @@ export function InversionControls({
       </div>
       <div role="radiogroup" aria-label={`Inversiones ${voicingType}`} style={voicingPositionsStyle}>
         <span style={voicingLabelStyle}>{t('inversions')}</span>
-        <button type="button" aria-label="Subir a la próxima inversión" onClick={() => onInversionStep?.(1)} style={voicingStepButtonStyle}>↑</button>
+        <button type="button" aria-label="Subir a la próxima inversión" onClick={() => onInversionStep?.(1)} disabled={isSequencePlaying} style={{ ...voicingStepButtonStyle, opacity: isSequencePlaying ? 0.5 : 1 }}>↑</button>
         {Array.from({ length: inversionCount }, (_, index) => index + 1).map((position) => (
           <button
             key={position}
@@ -139,12 +141,13 @@ export function InversionControls({
             aria-checked={voicingNumber === position}
             aria-label={`${voicingType} posición ${position}`}
             onClick={() => (onVoicingChangeSilent ?? onVoicingChange)(`${voicingType}-${position}` as ChordVoicing)}
+            disabled={isSequencePlaying}
             style={{ ...voicingPositionButtonStyle, background: voicingNumber === position ? '#0f766e' : 'white', color: voicingNumber === position ? 'white' : '#292524' }}
           >
             {position}
           </button>
         ))}
-        <button type="button" aria-label="Bajar a la inversión anterior" onClick={() => onInversionStep?.(-1)} style={voicingStepButtonStyle}>↓</button>
+        <button type="button" aria-label="Bajar a la inversión anterior" onClick={() => onInversionStep?.(-1)} disabled={isSequencePlaying} style={{ ...voicingStepButtonStyle, opacity: isSequencePlaying ? 0.5 : 1 }}>↓</button>
       </div>
       <div role="group" aria-label="Cambiar octava de la inversión" style={voicingPositionsStyle}>
         <span style={voicingLabelStyle}>{t('octave')}</span>
@@ -153,8 +156,8 @@ export function InversionControls({
           aria-label="Subir una octava"
           title="Subir una octava"
           onClick={() => onOctaveStep?.(1)}
-          disabled={!canOctaveUp}
-          style={{ ...voicingStepButtonStyle, opacity: canOctaveUp ? 1 : 0.5, cursor: canOctaveUp ? 'pointer' : 'not-allowed' }}
+          disabled={isSequencePlaying || !canOctaveUp}
+          style={{ ...voicingStepButtonStyle, opacity: isSequencePlaying || !canOctaveUp ? 0.5 : 1, cursor: isSequencePlaying || !canOctaveUp ? 'not-allowed' : 'pointer' }}
         >
           ↑8
         </button>
@@ -163,8 +166,8 @@ export function InversionControls({
           aria-label="Bajar una octava"
           title="Bajar una octava"
           onClick={() => onOctaveStep?.(-1)}
-          disabled={!canOctaveDown}
-          style={{ ...voicingStepButtonStyle, opacity: canOctaveDown ? 1 : 0.5, cursor: canOctaveDown ? 'pointer' : 'not-allowed' }}
+          disabled={isSequencePlaying || !canOctaveDown}
+          style={{ ...voicingStepButtonStyle, opacity: isSequencePlaying || !canOctaveDown ? 0.5 : 1, cursor: isSequencePlaying || !canOctaveDown ? 'not-allowed' : 'pointer' }}
         >
           ↓8
         </button>
@@ -177,8 +180,8 @@ export function InversionControls({
       {linkedStringGroupNavigation && (
         <div role="group" aria-label="Cambiar grupo de cuerdas" style={voicingPositionsStyle}>
           <span style={voicingLabelStyle}>Grupo</span>
-          <button type="button" aria-label="Mover a cuerdas más agudas" title="Cuerdas más agudas" onClick={() => onStringGroupStep?.(1)} disabled={!canStringGroupUp} style={{ ...voicingStepButtonStyle, opacity: canStringGroupUp ? 1 : 0.5 }}>←</button>
-          <button type="button" aria-label="Mover a cuerdas más graves" title="Cuerdas más graves" onClick={() => onStringGroupStep?.(-1)} disabled={!canStringGroupDown} style={{ ...voicingStepButtonStyle, opacity: canStringGroupDown ? 1 : 0.5 }}>→</button>
+          <button type="button" aria-label="Mover a cuerdas más agudas" title="Cuerdas más agudas" onClick={() => onStringGroupStep?.(1)} disabled={isSequencePlaying || !canStringGroupUp} style={{ ...voicingStepButtonStyle, opacity: isSequencePlaying || !canStringGroupUp ? 0.5 : 1 }}>←</button>
+          <button type="button" aria-label="Mover a cuerdas más graves" title="Cuerdas más graves" onClick={() => onStringGroupStep?.(-1)} disabled={isSequencePlaying || !canStringGroupDown} style={{ ...voicingStepButtonStyle, opacity: isSequencePlaying || !canStringGroupDown ? 0.5 : 1 }}>→</button>
         </div>
       )}
     </div>
