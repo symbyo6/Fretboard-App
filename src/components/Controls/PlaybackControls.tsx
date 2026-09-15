@@ -245,8 +245,10 @@ export function PlaybackControls({
                 type="button"
                 onClick={() => {
                   stopAll();
-                  setSelectedStepIndex(index);
-                  onStepChange?.(index);
+                  window.setTimeout(() => {
+                    setSelectedStepIndex(index);
+                    onStepChange?.(index);
+                  }, 0);
                   onNoteChange?.(null);
                   void playPreviewChord(step.noteNames);
                 }}

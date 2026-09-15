@@ -215,6 +215,22 @@ export function Fretboard({
   );
 
   const renderablePositions = useMemo(() => {
+    const categoryByPitch = new Map<PitchClass, NoteCategory>();
+    for (let pitch = 0; pitch < 12; pitch++) {
+      const pitchClass = pitch as PitchClass;
+      const classification = classifyPitch(pitchClass, scaleToneSet, chordToneSet);
+      categoryByPitch.set(
+        pitchClass,
+        pitchClass === rootPitch
+          ? 'root'
+          : classification === 'chord-tone'
+            ? 'chordTone'
+            : classification === 'scale-tone'
+              ? 'scaleTone'
+              : 'outside'
+      );
+    }
+
     const positions: Array<{
       position: FretboardPosition;
       pitch: PitchClass;
@@ -225,14 +241,7 @@ export function Fretboard({
       for (let fret = 0; fret <= layout.fretCount; fret++) {
         const string = stringNumber as StringNumber;
         const pitch = getPitchAtPosition(string, fret, STANDARD_TUNING);
-        const classification = classifyPitch(pitch, scaleToneSet, chordToneSet);
-        const category: NoteCategory = pitch === rootPitch
-          ? 'root'
-          : classification === 'chord-tone'
-            ? 'chordTone'
-            : classification === 'scale-tone'
-              ? 'scaleTone'
-              : 'outside';
+        const category = categoryByPitch.get(pitch) ?? 'outside';
 
         positions.push({
           position: { string, fret, pitch },
@@ -522,16 +531,20 @@ export function Fretboard({
               && pitch === chordRootPitch;
             const isActiveChordRoot = chordRootPitch !== undefined && pitch === chordRootPitch;
             const isLinkedChordMode = hideScaleTones;
+            const isSequenceChordTone = isLinkedChordMode && chordToneSet.has(pitch);
             const isModeRootGreen = category === 'root' && !rootIsRed && !hideFundamentalRootNotes;
             const isFundamentalRoot = pitch === fundamentalRootPitch;
             const { x, y } = getPixelPosition(position);
             const label = resolveLabel(position, pitch);
             const isRootInChord = category === 'root' && chordToneSet.has(pitch);
-            const isChordOrRoot = category === 'chordTone'
+            const isChordOrRoot = isSequenceChordTone
+              || category === 'chordTone'
               || isRootInChord
               || isActiveChordRoot
               || isModeRootGreen;
-            const isMutedRoot = category === 'root' && !isRootInChord;
+            const isMutedRoot = isLinkedChordMode
+              ? !isSequenceChordTone
+              : category === 'root' && !isRootInChord;
             const radius = isChordOrRoot
               ? layout.noteRadius
               : isMutedRoot
@@ -541,6 +554,8 @@ export function Fretboard({
             const isPlayedFundamentalRoot = `${position.string}-${position.fret}` === playedFundamentalRootPositionKey;
             const style = isLinkedChordMode && isActiveChordRoot
               ? SECONDARY_ROOT_STYLE
+              : isLinkedChordMode && isSequenceChordTone
+                ? CATEGORY_STYLES.chordTone
               : isPlayedFundamentalRoot && !neutralizeRootStyle
               ? CATEGORY_STYLES.root
               : isActiveChordRoot

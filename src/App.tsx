@@ -1020,9 +1020,18 @@ function App(): JSX.Element {
     ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
     : activeProgressionSteps[activeStepIndex] ?? null;
   const activePlaybackChordToneSet = useMemo(() => (
-    activePlaybackStep?.pitches ? new Set(activePlaybackStep.pitches) : chordToneSet
+    activePlaybackStep
+      ? new Set(activePlaybackStep.positions.map((position) => position.pitch))
+      : chordToneSet
   ), [activePlaybackStep, chordToneSet]);
   const activePlaybackStepIndex = activeStepIndex ?? (sequenceMode === 'linked' ? 0 : -1);
+  const activePlaybackLinkedChord = sequenceMode === 'linked'
+    ? linkedChordSequence[activePlaybackStepIndex]?.chord
+    : undefined;
+  const activePlaybackChordRootPitch = activePlaybackLinkedChord?.rootPitch
+    ?? (activePlaybackStep
+      ? chords.find((chord) => chord.romanLabel === activePlaybackStep.label)?.rootPitch
+      : undefined);
   const activePlaybackIsNonDiatonic = sequenceMode === 'linked'
     && activePlaybackStepIndex >= 0
     && linkedChordSequence[activePlaybackStepIndex]?.token.status !== 'diatonic';
@@ -1076,7 +1085,7 @@ function App(): JSX.Element {
     return result ? result.positions.map((position) => `${position.string}-${position.fret}`) : [];
   }, [drop3StringGroup, lowerString, selectedChord, upperString, voicing, voicingType]);
   const highlightedPositions = useMemo(() => {
-    if (sequenceMode === 'linked' && !isSequencePlaying && lastChordPositionKeys) {
+    if (sequenceMode === 'linked' && activeStepIndex === null && !isSequencePlaying && lastChordPositionKeys) {
       return new Set(lastChordPositionKeys);
     }
     const activeStep = activeStepIndex === null
@@ -1817,7 +1826,7 @@ function App(): JSX.Element {
           rootIsRed={sequenceMode !== 'linked' && modeDegree === 1}
           fundamentalRootPitch={KEY_TO_PITCH[modeBaseKey]}
           chordRootPitch={sequenceMode === 'linked'
-            ? linkedChordSequence[activePlaybackStepIndex]?.chord?.rootPitch
+            ? activePlaybackChordRootPitch
             : selectedChord?.rootPitch}
           scaleToneSet={scaleToneSet}
           chordToneSet={activePlaybackChordToneSet}
