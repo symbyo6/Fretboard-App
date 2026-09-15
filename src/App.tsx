@@ -1024,11 +1024,11 @@ function App(): JSX.Element {
     ));
   }, [activeProgressionSteps, linkedStepOverride, sequenceMode]);
   const playbackProgressionSteps = useMemo(() => (
-    visibleProgressionSteps.map((step) => ({
+    (isSequencePlaying ? activeProgressionSteps : visibleProgressionSteps).map((step) => ({
       ...step,
       noteNames: step.positions.map((position) => fretToNoteName(position.string - 1, position.fret)),
     }))
-  ), [visibleProgressionSteps]);
+  ), [activeProgressionSteps, isSequencePlaying, visibleProgressionSteps]);
   const activePlaybackStep = activeStepIndex === null
     ? sequenceMode === 'linked' ? visibleProgressionSteps[0] ?? null : null
     : visibleProgressionSteps[activeStepIndex] ?? null;
