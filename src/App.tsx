@@ -1414,14 +1414,18 @@ function App(): JSX.Element {
         []
       );
       if (result) {
-        setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
-        setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName));
-        playChord(result.noteNames);
-        scheduleChordHighlightClear();
+        if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+          setLastChordPositionKeys(null);
+          setLastChordVoiceMidis(null);
+          setActiveNoteIndex(null);
+        } else {
+          setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
+          setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
+          setPlayingChordLabel(getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName));
+        }
       }
     }
-  }, [lowerString, playChord, scheduleChordHighlightClear, selectedChord, upperString, useEnharmonicTonicName, voicing]);
+  }, [activeProgressionSteps.length, lowerString, selectedChord, sequenceMode, upperString, useEnharmonicTonicName, voicing]);
 
   const handleKeepLastPlayedChange = useCallback((keep: boolean) => {
     setKeepLastPlayed(keep);
