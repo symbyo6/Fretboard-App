@@ -1436,8 +1436,8 @@ function App(): JSX.Element {
     handleVoicingChange(
       nextVoicing,
       undefined,
-      !isSequencePlaying,
-      isSequencePlaying,
+      false,
+      false,
       -Infinity,
       true,
       []
@@ -1452,6 +1452,7 @@ function App(): JSX.Element {
   }, [playNote, scheduleChordHighlightClear]);
 
   const handleStringGroupChange = (nextLowerString: number, nextUpperString: number) => {
+    if (isSequencePlaying) return;
     setLastChordLowStringMidi(null);
     setLastChordPositionKeys(null);
     setLastChordVoiceMidis(null);
@@ -1462,10 +1463,13 @@ function App(): JSX.Element {
     setLowerString(Math.max(nextLowerString, nextUpperString));
     setUpperString(Math.min(nextUpperString, nextLowerString));
 
-    if (selectedChord) {
+    const previewChord = sequenceMode === 'linked'
+      ? linkedChordSequence[activeStepIndex ?? 0]?.chord ?? selectedChord
+      : selectedChord;
+    if (previewChord) {
       const nextStringSet = voicingType === 'drop3' ? activeStringSet : undefined;
       const result = getArpeggioPositions(
-        toVoicing(selectedChord, voicing),
+        toVoicing(previewChord, voicing),
         Math.max(nextLowerString, nextUpperString),
         Math.min(nextUpperString, nextLowerString),
         nextStringSet,
@@ -1481,8 +1485,7 @@ function App(): JSX.Element {
       if (result) {
         setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
         setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName));
-        playChord(result.noteNames);
+        setPlayingChordLabel(getDisplayedChordSymbol(previewChord, useEnharmonicTonicName));
         scheduleChordHighlightClear();
       }
     }
@@ -1530,6 +1533,7 @@ function App(): JSX.Element {
   const canStringGroupDown = sequenceMode === 'linked' && activeProgressionSteps.length > 0 && canMoveToAdjacentGroup(-1);
 
   const handleStringGroupStep = useCallback((direction: 1 | -1) => {
+    if (isSequencePlaying) return;
     if (!canMoveToAdjacentGroup(direction)) return;
     if (voicingType === 'drop3') {
       setDrop3StringGroup(direction > 0 ? 1 : 0);
@@ -1540,10 +1544,24 @@ function App(): JSX.Element {
     setLinkedSequenceOctaveOffset(0);
     setLastChordPositionKeys(null);
     setActiveStepIndex(0);
-  }, [canMoveToAdjacentGroup, voicingType]);
+    const previewStep = activeProgressionSteps[activeStepIndex ?? 0];
+  }, [activeProgressionSteps, activeStepIndex, canMoveToAdjacentGroup, voicingType]);
 
   const handleOctaveStep = useCallback((direction: 1 | -1) => {
+    if (isSequencePlaying) return;
     if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+      const activeStep = activeProgressionSteps[activeStepIndex ?? 0];
+      if (activeStep) {
+        const shiftedNoteNames = activeStep.positions.map((position) => fretToNoteName(
+          position.string - 1,
+          position.fret + direction * 12
+        ));
+        if (activeStep.positions.every((position) => {
+          const shiftedFret = position.fret + direction * 12;
+          return shiftedFret >= 0 && shiftedFret <= MAX_FRETBOARD_FRET;
+        })) {
+        }
+      }
       setLastChordPositionKeys(null);
       setLastChordVoiceMidis(null);
       setActiveNoteIndex(null);
@@ -1564,9 +1582,8 @@ function App(): JSX.Element {
     setLastChordPositionKeys(shiftedPositions.map((position) => `${position.string}-${position.fret}`));
     setLastChordVoiceMidis(noteNames.map((note) => Tone.Frequency(note).toMidi()));
     setLastChordLowStringMidi(Tone.Frequency(noteNames[0]).toMidi());
-    playChord(noteNames);
     scheduleChordHighlightClear();
-  }, [activeProgressionSteps, canShiftOctave, currentChordPositions, playChord, scheduleChordHighlightClear, sequenceMode]);
+  }, [activeProgressionSteps, activeStepIndex, canShiftOctave, currentChordPositions, scheduleChordHighlightClear, sequenceMode]);
 
   const handleDegreeChange = (nextDegree: number) => {
     if (nextDegree < 1 || nextDegree > 7) {

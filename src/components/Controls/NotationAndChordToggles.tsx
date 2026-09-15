@@ -84,7 +84,7 @@ export function InversionControls({
   const inversionCount = extendedChords ? 4 : 3;
   const handleVoicingTypeChange = (type: ChordVoicingType) => {
     onVoicingTypeChange(type);
-    onVoicingChange(type === 'closed' ? 'closed' : `${type}-1` as ChordVoicing);
+    (onVoicingChangeSilent ?? onVoicingChange)(type === 'closed' ? 'closed' : `${type}-1` as ChordVoicing);
   };
 
   return (
