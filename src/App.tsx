@@ -1016,9 +1016,16 @@ function App(): JSX.Element {
       ? octavedGlobalLinkedProgressionSteps ?? globallyLinkedProgressionSteps ?? []
       : progressionSteps;
   }, [globallyLinkedProgressionSteps, octavedGlobalLinkedProgressionSteps, progressionSteps, sequenceMode]);
+  const visibleProgressionSteps = activeProgressionSteps;
+  const playbackProgressionSteps = useMemo(() => (
+    visibleProgressionSteps.map((step) => ({
+      ...step,
+      noteNames: step.positions.map((position) => fretToNoteName(position.string - 1, position.fret)),
+    }))
+  ), [visibleProgressionSteps]);
   const activePlaybackStep = activeStepIndex === null
-    ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
-    : activeProgressionSteps[activeStepIndex] ?? null;
+    ? sequenceMode === 'linked' ? visibleProgressionSteps[0] ?? null : null
+    : visibleProgressionSteps[activeStepIndex] ?? null;
   const activePlaybackChordToneSet = useMemo(() => (
     activePlaybackStep
       ? new Set(activePlaybackStep.positions.map((position) => position.pitch))
@@ -1102,9 +1109,9 @@ function App(): JSX.Element {
     return new Set(
       activePositionKeys
     );
-  }, [activeNoteIndex, activeProgressionSteps, activeStepIndex, currentVoicingPositionKeys, isSequencePlaying, lastChordPositionKeys, sequenceMode]);
+  }, [activeNoteIndex, activeStepIndex, currentVoicingPositionKeys, isSequencePlaying, lastChordPositionKeys, sequenceMode, visibleProgressionSteps]);
   const playingTabPositions = useMemo(() => {
-    if (lastChordPositionKeys) {
+    if (lastChordPositionKeys && activeStepIndex === null) {
       return lastChordPositionKeys.map((key) => {
         const [string, fret] = key.split('-').map(Number);
         return { string, fret };
@@ -1112,15 +1119,15 @@ function App(): JSX.Element {
     }
 
     const activeStep = activeStepIndex === null
-      ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
-      : activeProgressionSteps[activeStepIndex];
+      ? sequenceMode === 'linked' ? visibleProgressionSteps[0] ?? null : null
+      : visibleProgressionSteps[activeStepIndex];
     if (activeStep) return activeStep.positions;
     if (currentVoicingPositionKeys.length === 0) return [];
     return currentVoicingPositionKeys.map((key) => {
       const [string, fret] = key.split('-').map(Number);
       return { string, fret };
     });
-  }, [activeProgressionSteps, activeStepIndex, currentVoicingPositionKeys, lastChordPositionKeys, sequenceMode]);
+  }, [activeStepIndex, currentVoicingPositionKeys, lastChordPositionKeys, sequenceMode, visibleProgressionSteps]);
 
   const scheduleChordHighlightClear = useCallback(() => {
     if (chordHighlightTimerRef.current !== null) {
@@ -1152,12 +1159,12 @@ function App(): JSX.Element {
     setLastChordVoiceMidis(null);
     setPlayingChordLabel(null);
     if (sequenceMode === 'linked' && !preserveSequence) {
-      setActiveStepIndex(0);
+      setActiveStepIndex((currentIndex) => currentIndex ?? 0);
       setActiveNoteIndex(null);
     }
     if (!preserveSequence) {
       if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
-        setActiveStepIndex(0);
+        setActiveStepIndex((currentIndex) => currentIndex ?? 0);
         setActiveNoteIndex(null);
       } else {
         setActiveStepIndex(null);
@@ -1184,9 +1191,15 @@ function App(): JSX.Element {
       );
 
       if (result) {
-        setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
-        setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
-        setPlayingChordLabel(getDisplayedChordSymbol(previewChord, useEnharmonicTonicName));
+        if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
+          setLastChordPositionKeys(null);
+          setLastChordVoiceMidis(null);
+          setLastChordLowStringMidi(null);
+        } else {
+          setLastChordPositionKeys(result.positions.map((position) => `${position.string}-${position.fret}`));
+          setLastChordVoiceMidis(result.noteNames.map((note) => Tone.Frequency(note).toMidi()));
+          setPlayingChordLabel(getDisplayedChordSymbol(previewChord, useEnharmonicTonicName));
+        }
         if (playSound) playPreviewChord(result.noteNames);
         scheduleChordHighlightClear();
       }
@@ -1787,7 +1800,7 @@ function App(): JSX.Element {
         />
         {supportsChordFunctions && (
           <PlaybackControls
-            steps={activeProgressionSteps}
+            steps={playbackProgressionSteps}
             label={sequenceMode === 'linked'
               ? (language === 'en' ? 'Linked chords' : 'Acordes enlazados')
               : (language === 'en' ? 'Diatonic chords' : 'Acordes diatónicos')}
