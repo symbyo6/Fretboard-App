@@ -60,7 +60,24 @@ test('C Ionian resolves to seven scale tones', () => {
 
 test('Triad linking table follows the specified delta mappings', () => {
   assertEqual(getDiatonicDelta(1, 2), 1, 'I to II delta');
-  assertEqual(getTriadLinkedInversion(1, 2, 1), 1, 'Triad delta 1 inversion');
+  const topRow = [1, 3, 3, 2, 2, 1] as const;
+  for (const [index, expected] of topRow.entries()) {
+    const delta = (index + 1) as 1 | 2 | 3 | 4 | 5 | 6;
+    const targetDegree = ((1 + delta - 1) % 7) + 1;
+    assertEqual(
+      getTriadLinkedInversion(1, targetDegree, 1),
+      expected,
+      `Triad top row delta ${delta} maps 1 to ${expected}`
+    );
+  }
+  for (const inversion of [1, 2, 3] as const) {
+    assertEqual(
+      getTriadLinkedInversion(1, 2, inversion),
+      inversion,
+      `Triad delta 1 keeps inversion ${inversion}`
+    );
+  }
+  assertEqual(getTriadLinkedInversion(5, 6, 2), 2, 'V to vi keeps second inversion');
   assertEqual(getTriadLinkedInversion(1, 3, 1), 3, 'Triad delta 2 inversion');
   assertEqual(getTriadLinkedInversion(1, 5, 1), 2, 'Triad delta 4 inversion');
   assertEqual(getTriadLinkedInversion(1, 7, 1), 1, 'Triad delta 6 inversion');
@@ -115,6 +132,14 @@ test('Chromatic transitions expose physical inversion choices', () => {
   const linked = linkChordSequence(analysis, 'drop2-1', true);
   assertEqual(linked[2]?.delta, null, 'Chromatic transition has no diatonic delta');
   assertEqual(linked[2]?.linkStatus, 'chromatic', 'Chromatic transition is marked physical');
+});
+
+test('Triad D to Em keeps the inversion for delta 1 even in C', () => {
+  const chords = getAllDiatonicChords(resolveScale('ionian', 'C'), false);
+  const analysis = analyzeChordSequence('D - Em', chords);
+  const linked = linkChordSequence(analysis, 'closed-2', false);
+  assertEqual(linked[1]?.delta, 1, 'D to Em is a one-degree triad transition');
+  assertEqual(linked[1]?.targetInversion, linked[1]?.sourceInversion, 'D to Em keeps the triad inversion');
 });
 
 test('Diminished seventh inversions normalize to one symmetric voicing', () => {

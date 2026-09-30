@@ -1,7 +1,6 @@
 // src/hooks/useProgression.ts
 
 import { useCallback, useRef, useState } from 'react';
-import * as Tone from 'tone';
 import { audioEngine } from '../lib/audio/audioEngine';
 
 export interface ProgressionStep {
@@ -52,16 +51,15 @@ export function useProgression(
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentIndex, setCurrentIndex] = useState<number | null>(null);
-  const partRef = useRef<Tone.Part | null>(null);
+  const timerRef = useRef<number | null>(null);
+  const playbackRunRef = useRef(0);
 
   const stop = useCallback(() => {
-    partRef.current?.stop();
-    partRef.current?.dispose();
-    partRef.current = null;
-
-    Tone.Transport.stop();
-    Tone.Transport.cancel();
-    Tone.Transport.position = 0;
+    playbackRunRef.current += 1;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
     audioEngine.stopAll();
 
     setIsPlaying(false);
@@ -81,67 +79,47 @@ export function useProgression(
       onPlaybackError?.(error);
       return;
     }
-    Tone.Transport.position = 0;
-
-    Tone.Transport.bpm.value = bpm;
-    const playbackLeadIn = 0.08;
     const baseSecondsPerStep = 60 / bpm;
     const minimumNoteSpacing = 0.14;
-    const orderedSteps = steps;
-    const stepDurations = orderedSteps.map((step) => mode === 'chord'
+    const stepDurations = steps.map((step) => mode === 'chord'
       ? baseSecondsPerStep
       : Math.max(baseSecondsPerStep, step.noteNames.length * minimumNoteSpacing));
-    let elapsedSeconds = 0;
-    const events = orderedSteps.map((step, index) => {
-      const event = {
-        time: playbackLeadIn + elapsedSeconds,
-        index,
-        noteNames: step.noteNames,
-        durationSeconds: stepDurations[index],
-      };
-      elapsedSeconds += stepDurations[index];
-      return event;
-    });
-
-    const part = new Tone.Part<{
-      time: number;
-      index: number;
-      noteNames: string[];
-      durationSeconds: number;
-    }>(
-      (_time, event) => {
-        setCurrentIndex(event.index);
-        onStepChange?.(event.index);
-
-        if (mode === 'chord') {
-          onNoteChange?.(null);
-          audioEngine.playScheduledChord(event.noteNames, event.durationSeconds * 0.82, 0.75, _time);
-          return;
-        }
-
-        const orderedNotes = direction === 'descending'
-          ? [...event.noteNames].reverse()
-          : event.noteNames;
-        const spacing = event.durationSeconds / Math.max(orderedNotes.length, 1);
-        onNoteChange?.(direction === 'descending' ? orderedNotes.length - 1 : 0);
-        audioEngine.playScheduledArpeggio(orderedNotes, spacing, spacing * 0.9, (noteIndex) => {
-          onNoteChange?.(direction === 'descending'
-            ? orderedNotes.length - 1 - noteIndex
-            : noteIndex);
-        }, _time);
-      },
-      events
-    );
-
-    part.start(0);
-    partRef.current = part;
-    Tone.Transport.start();
+    const run = playbackRunRef.current;
     setIsPlaying(true);
     onPlayingChange?.(true);
 
-    Tone.Transport.scheduleOnce(() => {
-      stop();
-    }, playbackLeadIn + elapsedSeconds + 0.05);
+    const playStep = (index: number) => {
+      if (playbackRunRef.current !== run) return;
+      if (index >= steps.length) {
+        stop();
+        return;
+      }
+
+      const step = steps[index];
+      const durationSeconds = stepDurations[index];
+      setCurrentIndex(index);
+      onStepChange?.(index);
+
+      if (mode === 'chord') {
+        onNoteChange?.(null);
+        audioEngine.playSequenceChord(step.noteNames, durationSeconds * 0.82, 0.75);
+      } else {
+        const orderedNotes = direction === 'descending'
+          ? [...step.noteNames].reverse()
+          : step.noteNames;
+        const spacing = durationSeconds / Math.max(orderedNotes.length, 1);
+        onNoteChange?.(direction === 'descending' ? orderedNotes.length - 1 : 0);
+        audioEngine.playSequenceArpeggio(orderedNotes, spacing, spacing * 0.9, (noteIndex) => {
+          onNoteChange?.(direction === 'descending'
+            ? orderedNotes.length - 1 - noteIndex
+            : noteIndex);
+        });
+      }
+
+      timerRef.current = window.setTimeout(() => playStep(index + 1), durationSeconds * 1000);
+    };
+
+    playStep(0);
   }, [steps, bpm, mode, direction, onStepChange, onNoteChange, onPlayingChange, onPlaybackError, stop]);
 
   return { isPlaying, currentIndex, play, stop };

@@ -6,12 +6,12 @@ export type TriadInversion = 1 | 2 | 3;
 export type TetradInversion = 1 | 2 | 3 | 4;
 
 const TRIAD_TABLE: Record<1 | 2 | 3 | 4 | 5 | 6, readonly TriadInversion[]> = {
-  1: [1, 3, 2],
+  1: [1, 2, 3],
   2: [3, 1, 2],
   3: [3, 1, 2],
   4: [2, 3, 1],
   5: [2, 3, 1],
-  6: [1, 3, 2],
+  6: [1, 2, 3],
 };
 
 const TETRAD_TABLE: Record<1 | 2 | 3 | 4 | 5 | 6, readonly TetradInversion[]> = {
@@ -108,9 +108,9 @@ export function linkChordTransition(
     ? Math.min(4, Math.max(1, sourceInversion)) as TetradInversion
     : Math.min(3, Math.max(1, sourceInversion)) as TriadInversion;
   const sameRoot = previousDegree === token.rootDegree;
-  const isDiatonicLink = !sameRoot
-    && previous.token.status === 'diatonic'
-    && token.status === 'diatonic';
+  const isDiatonicLink = !sameRoot && (extendedChords
+    ? previous.token.status === 'diatonic' && token.status === 'diatonic'
+    : true);
   const delta = isDiatonicLink ? getDiatonicDelta(previousDegree, token.rootDegree) : null;
   const linkedInversion = !isDiatonicLink
     ? normalizedSourceInversion

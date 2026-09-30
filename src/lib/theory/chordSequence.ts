@@ -107,3 +107,15 @@ export function analyzeChordSequence(input: string, diatonicChords: DiatonicChor
     .filter(Boolean)
     .map((token) => parseChordToken(token, diatonicChords));
 }
+
+export function transposeChordSequence(input: string, semitones: number, notation: 'sharps' | 'flats' = 'sharps'): string {
+  return input.split(/([\s,;→>-]+)/).map((part) => {
+    const match = part.match(/^([A-Ga-g])([#b♭♯]?)(.*)$/);
+    if (!match) return part;
+    const rootName = resolveRoot(match[1], match[2]);
+    if (!rootName) return part;
+    const transposedPitch = normalizePitch(KEY_TO_PITCH[rootName] + semitones);
+    const transposedRoot = getNoteName(transposedPitch, notation);
+    return `${transposedRoot}${match[3]}`;
+  }).join('');
+}

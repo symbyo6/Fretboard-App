@@ -1,5 +1,76 @@
 {
   "name": "fretboard-app",
   "version": "0.1.0",
-  "main": "electron/main.cjs"
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build --base=./",
+    "preview": "vite preview",
+    "desktop": "electron .",
+    "package:win": "npm run build && electron-builder --win portable",
+    "package:win:installer": "npm run build && electron-builder --win nsis",
+    "test:smoke": "tsx scripts/smoke-test.ts",
+    "test": "npm run test:smoke",
+    "prepare": "husky",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --fix"
+    ]
+  },
+  "dependencies": {
+    "jspdf": "^4.2.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tone": "^15.1.22",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.7.0",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^9.7.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.6",
+    "electron": "^38.2.0",
+    "electron-builder": "^26.0.12",
+    "globals": "^17.12.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.5.0",
+    "tsx": "^4.7.0",
+    "typescript-eslint": "^8.69.0",
+    "vite": "^5.4.14"
+  },
+  "main": "electron/main.cjs",
+  "build": {
+    "appId": "com.juananderson.fretboard",
+    "productName": "Fretboard App",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["portable", "nsis"],
+      "artifactName": "Fretboard-App-${version}-${arch}.${ext}"
+    },
+    "portable": {
+      "artifactName": "Fretboard-App-${version}-portable.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Fretboard App"
+    }
+  }
 }

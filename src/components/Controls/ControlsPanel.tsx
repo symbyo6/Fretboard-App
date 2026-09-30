@@ -54,6 +54,7 @@ export interface ControlsPanelProps {
   onSequenceModeChange: (mode: 'diatonic' | 'linked') => void;
   hasMixedChordTypes: boolean;
   onClearChordSequence: () => void;
+  onTransposeChordSequence: () => void;
   linkedSequenceUnavailable: boolean;
 }
 
@@ -109,6 +110,7 @@ export function ControlsPanel({
   onSequenceModeChange,
   hasMixedChordTypes,
   onClearChordSequence,
+  onTransposeChordSequence,
   linkedSequenceUnavailable,
 }: ControlsPanelProps): JSX.Element {
   const isCompact = useIsCompactViewport();
@@ -201,6 +203,7 @@ export function ControlsPanel({
             linkedSequence={linkedChordSequence}
             hasMixedChordTypes={hasMixedChordTypes}
             onClear={onClearChordSequence}
+            onTranspose={onTransposeChordSequence}
             linkedSequenceUnavailable={linkedSequenceUnavailable}
             sequenceMode={sequenceMode}
             onSequenceModeChange={onSequenceModeChange}
@@ -214,7 +217,7 @@ export function ControlsPanel({
             <DegreeSelector
               chords={diatonicChords}
               value={degree}
-              tonicName={fundamentalChordName}
+              tonicName={sequenceMode === 'linked' ? '' : fundamentalChordName}
               onChange={onDegreeChange}
               onChordSelect={onChordSelect}
               playingChordLabel={playingChordLabel}

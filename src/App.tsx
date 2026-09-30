@@ -7,11 +7,11 @@ import { Fretboard } from './components/Fretboard/Fretboard';
 import { getAllDiatonicChords, getChordToneSet, getScaleToneSet, toVoicing, type ChordVoicing, type ChordVoicingType } from './lib/theory/chords';
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { fretToNoteName } from './lib/audio/tuning';
-import { getAllPositionsForPitch } from './lib/theory/fretboardPositions';
+import { getAllPositionsForPitch, getPitchAtPosition, STANDARD_TUNING } from './lib/theory/fretboardPositions';
 import { getMajorDegreePentatonic, getScaleById, resolveScale } from './lib/theory/scales';
 import { downloadTabJpeg, downloadTabPdf, type FretboardDiagramStep } from './lib/tabPdf';
 import { localizeTheoryName, useLanguage } from './i18n';
-import { analyzeChordSequence, parseChordToken } from './lib/theory/chordSequence';
+import { analyzeChordSequence, parseChordToken, transposeChordSequence } from './lib/theory/chordSequence';
 import { linkChordSequence } from './lib/theory/voiceLeading';
 import type { PlaybackMode, ProgressionStep, SequenceDirection } from './hooks/useProgression';
 import type {
@@ -226,6 +226,34 @@ function getPhysicalInversion(chord: DiatonicChord, positions: FretboardPosition
         : 4;
 }
 
+function getVoicingForPhysicalInversion(
+  chord: DiatonicChord,
+  requestedVoicing: ChordVoicing
+): ChordVoicing {
+  const type: ChordVoicingType = requestedVoicing === 'closed'
+    ? 'closed'
+    : requestedVoicing.startsWith('drop2') ? 'drop2' : 'drop3';
+  const requestedInversion = requestedVoicing === 'closed'
+    ? 1
+    : Number(requestedVoicing.at(-1));
+  const candidateCount = chord.tones.length >= 4 ? 4 : 3;
+  const candidates: ChordVoicing[] = type === 'closed'
+    ? ['closed', ...Array.from({ length: candidateCount - 1 }, (_, index) => `closed-${index + 2}` as ChordVoicing)]
+    : Array.from({ length: candidateCount }, (_, index) => `${type}-${index + 1}` as ChordVoicing);
+  const match = candidates.find((candidate) => {
+    const firstTone = toVoicing(chord, candidate).tones[0];
+    const physicalInversion = firstTone?.role === 'root'
+      ? 1
+      : firstTone?.role === 'third'
+        ? 2
+        : firstTone?.role === 'fifth'
+          ? 3
+          : 4;
+    return physicalInversion === requestedInversion;
+  });
+  return match ?? requestedVoicing;
+}
+
 function isClosedPitchRange(noteNames: string[]): boolean {
   const midis = noteNames.map((note) => Tone.Frequency(note).toMidi());
   return midis.length > 0 && Math.max(...midis) - Math.min(...midis) < 12;
@@ -419,6 +447,7 @@ interface GlobalLinkedCandidate {
   bassToneRole: string;
   lower: number;
   upper: number;
+  octaveOffset: number;
   selected: boolean;
 }
 
@@ -429,7 +458,8 @@ function getAllPhysicalVoicingPositions(
   selectedStrings: number[] | undefined,
   voicingType: ChordVoicingType,
   enforceFretSpan = true,
-  enforceSpread = true
+  enforceSpread = true,
+  requireAscending = true
 ): FretboardPosition[][] {
   const strings = selectedStrings ?? Array.from(
     { length: lower - upper + 1 },
@@ -445,7 +475,7 @@ function getAllPhysicalVoicingPositions(
       ).toMidi());
       const frets = positions.map((position) => position.fret);
       if (enforceFretSpan && Math.max(...frets) - Math.min(...frets) > MAX_VOICING_FRET_SPAN) return;
-      if (!midis.every((midi, index) => index === 0 || midi > midis[index - 1])) return;
+      if (requireAscending && !midis.every((midi, index) => index === 0 || midi > midis[index - 1])) return;
       if (enforceSpread && voicingType !== 'closed' && isClosedPitchRange(positions.map((position) => (
         fretToNoteName(position.string - 1, position.fret)
       )))) return;
@@ -501,13 +531,19 @@ function findGlobalLinkedPath(
         ? inversion === 1 ? 'closed' : `closed-${inversion}` as ChordVoicing
         : `${voicingType}-${inversion}` as ChordVoicing;
       for (const context of contexts) {
-        const bases = getAllPhysicalVoicingPositions(
+        const getBases = (enforceFretSpan: boolean, enforceSpread: boolean) => getAllPhysicalVoicingPositions(
           toVoicing(currentLinkedStep.chord, candidateVoicing),
           context.lower,
           context.upper,
           voicingType === 'drop3' ? getDrop3StringSet(context.lower === 6 ? 0 : 1) : undefined,
-          voicingType
+          voicingType,
+          enforceFretSpan,
+          enforceSpread,
+          false
         ).map((positions) => ({ positions }));
+        const bases = getBases(true, true).length > 0
+          ? getBases(true, true)
+          : getBases(false, false);
         for (const base of bases) {
           for (const octave of [-24, -12, 0, 12, 24]) {
           const positions = base.positions.map((position) => ({ ...position, fret: position.fret + octave }));
@@ -533,6 +569,7 @@ function findGlobalLinkedPath(
             bassToneRole: toVoicing(currentLinkedStep.chord, candidateVoicing).tones[0]?.role ?? '',
             lower: context.lower,
             upper: context.upper,
+            octaveOffset: octave,
             selected: context.selected,
           });
         }
@@ -558,31 +595,38 @@ function findGlobalLinkedPath(
         const sameStringGroup = candidate.lower === prior.lower && candidate.upper === prior.upper;
         const isChromaticTransition = linkedChordSequence[layerIndex].linkStatus === 'chromatic'
           || linkedChordSequence[layerIndex - 1].linkStatus === 'chromatic';
-        const sameGroupHasViableCandidate = layers[layerIndex].some((sameGroupCandidate) => (
+        const sameGroupHasLinkedCandidate = layers[layerIndex].some((sameGroupCandidate) => (
           sameGroupCandidate.lower === prior.lower
           && sameGroupCandidate.upper === prior.upper
-          && (isChromaticTransition
-            ? Math.abs(
-              getPhysicalInversion(linkedChordSequence[layerIndex].chord!, sameGroupCandidate.positions)
-                - getPhysicalInversion(linkedChordSequence[layerIndex - 1].chord!, prior.positions)
-            ) <= 1
-            : true)
+          && sameGroupCandidate.octaveOffset === prior.octaveOffset
+          && Math.abs(
+            getPhysicalInversion(linkedChordSequence[layerIndex].chord!, sameGroupCandidate.positions)
+              - getPhysicalInversion(linkedChordSequence[layerIndex - 1].chord!, prior.positions)
+          ) <= 1
           && sameGroupCandidate.midis.every((midi, voiceIndex) => (
             Math.abs(midi - prior.midis[voiceIndex]) <= MAX_LINK_VOICE_JUMP
           ))
+          && sameGroupCandidate.positions.reduce((movement, position, voiceIndex) => (
+            movement + Math.abs(position.fret - prior.positions[voiceIndex].fret)
+          ), 0) <= MAX_VOICING_FRET_SPAN * 2
         ));
-        if (!sameStringGroup && sameGroupHasViableCandidate) return;
-        if (!sameStringGroup && (
-          candidate.inversion !== prior.inversion
-          || candidate.bassToneRole !== prior.bassToneRole
-        )) return;
+        if (!sameStringGroup && sameGroupHasLinkedCandidate) return;
+        if (!sameStringGroup && isChromaticTransition) {
+          const candidateInversion = getPhysicalInversion(linkedChordSequence[layerIndex].chord!, candidate.positions);
+          const priorInversion = getPhysicalInversion(linkedChordSequence[layerIndex - 1].chord!, prior.positions);
+          if (Math.abs(candidateInversion - priorInversion) > 1) return;
+        }
         const sharedPitches = Object.keys(candidate.tonePositionKeys)
           .map(Number)
           .filter((pitch) => Object.hasOwn(prior.tonePositionKeys, pitch));
         const voiceMovement = candidate.midis.reduce((sum, midi, voiceIndex) => sum + Math.abs(midi - prior.midis[voiceIndex]), 0);
-        if (candidate.midis.some((midi, voiceIndex) => (
-          Math.abs(midi - prior.midis[voiceIndex]) > MAX_LINK_VOICE_JUMP
-        ))) return;
+        const voiceJumpPenalty = candidate.midis.reduce((penalty, midi, voiceIndex) => {
+          const excess = Math.abs(midi - prior.midis[voiceIndex]) - MAX_LINK_VOICE_JUMP;
+          return penalty + (excess > 0 ? excess * 1000 : 0);
+        }, 0);
+        const fretMovement = candidate.positions.reduce((movement, position, voiceIndex) => (
+          movement + Math.abs(position.fret - prior.positions[voiceIndex].fret)
+        ), 0);
         if (!isSameOrAdjacentStringGroup(candidate.lower, candidate.upper, prior.lower, prior.upper)) return;
         const commonTonesRemainStatic = sharedPitches.every((pitch) => {
           const [priorString, priorFret] = prior.tonePositionKeys[pitch].split('-').map(Number);
@@ -591,7 +635,15 @@ function findGlobalLinkedPath(
             === Tone.Frequency(fretToNoteName(candidateString - 1, candidateFret)).toMidi();
         });
         if (!commonTonesRemainStatic) return;
-        const cost = costs[layerIndex - 1][priorIndex] + voiceMovement;
+        const octaveDelta = candidate.octaveOffset - prior.octaveOffset;
+        const octaveChangePenalty = Math.abs(octaveDelta) * 10000;
+        const upwardSameGroupPenalty = sameStringGroup && octaveDelta > 0 ? 15000 : 0;
+        const cost = costs[layerIndex - 1][priorIndex]
+          + voiceMovement
+          + octaveChangePenalty
+          + voiceJumpPenalty
+          + fretMovement * 100
+          + upwardSameGroupPenalty;
         if (cost < costs[layerIndex][candidateIndex]) {
           costs[layerIndex][candidateIndex] = cost;
           previous[layerIndex][candidateIndex] = priorIndex;
@@ -613,8 +665,75 @@ function findGlobalLinkedPath(
   }
   return selected;
   };
-  const selected = solveLayers(false) ?? solveLayers(true);
-  if (!selected) return null;
+  const selected = solveLayers(false) ?? solveLayers(true) ?? (
+    layers.length === linkedChordSequence.length && layers.every((layer) => layer.length > 0)
+      ? layers.reduce<GlobalLinkedCandidate[]>((path, layer, layerIndex) => {
+    if (layerIndex === 0) {
+      return [layer.find((candidate) => candidate.selected) ?? layer[0]];
+    }
+    const previous = path[layerIndex - 1];
+    const distance = (candidate: GlobalLinkedCandidate) => candidate.midis.reduce(
+      (sum, midi, voiceIndex) => sum + Math.abs(midi - previous.midis[voiceIndex]),
+      0
+    );
+    const viableCandidates = layer.filter((candidate) => candidate.midis.every((midi, voiceIndex) => (
+      Math.abs(midi - previous.midis[voiceIndex]) <= MAX_LINK_VOICE_JUMP
+    )));
+    const sameGroupCandidates = viableCandidates.filter((candidate) => (
+      candidate.lower === previous.lower && candidate.upper === previous.upper
+    ));
+    const nearest = (sameGroupCandidates.length > 0 ? sameGroupCandidates : viableCandidates)
+      .sort((a, b) => {
+        return distance(a) - distance(b);
+      })[0];
+    const closestCandidate = nearest ?? [...layer].sort((a, b) => distance(a) - distance(b))[0];
+    return [...path, closestCandidate];
+  }, []) : null);
+  if (!selected) {
+    const independentFallback = linkedChordSequence.map((linkedStep, index) => {
+      if (!linkedStep.chord || linkedStep.targetInversion === null) return null;
+      const inversion = index === 0
+        ? requestedInitialInversion
+        : Math.min(inversionCount, Math.max(1, linkedStep.targetInversion));
+      const candidateVoicing: ChordVoicing = voicingType === 'closed'
+        ? inversion === 1 ? 'closed' : `closed-${inversion}` as ChordVoicing
+        : `${voicingType}-${inversion}` as ChordVoicing;
+      for (const context of contexts) {
+        const result = getArpeggioPositions(
+          toVoicing(linkedStep.chord, candidateVoicing),
+          context.lower,
+          context.upper,
+          voicingType === 'drop3' ? getDrop3StringSet(context.lower === 6 ? 0 : 1) : undefined,
+          0,
+          -Infinity,
+          false,
+          false,
+          undefined,
+          true,
+          true,
+          [],
+          false,
+          true,
+          MAX_FRETBOARD_FRET
+        );
+        if (result) {
+          return {
+            id: `independent-linked-${index}`,
+            label: linkedStep.chord.romanLabel ?? linkedStep.token.input,
+            inversion,
+            noteNames: result.noteNames,
+            positionKeys: result.positions.map((position) => `${position.string}-${position.fret}`),
+            positions: result.positions,
+            stringGroup: `${context.lower}-${context.upper}`,
+            pitches: linkedStep.chord.tones.map((tone) => tone.pitch),
+          };
+        }
+      }
+      return null;
+    }).filter((step): step is ProgressionStep => step !== null);
+    if (independentFallback.length === linkedChordSequence.length) return independentFallback;
+    return null;
+  }
   return selected.map((candidate, index) => {
     const noteNames = candidate.positions.map((position) => fretToNoteName(position.string - 1, position.fret));
     return {
@@ -639,7 +758,7 @@ function App(): JSX.Element {
     && persistedAppSettings.chordSequence?.trim()
     ? 'linked'
     : 'diatonic';
-  const startsLinkedTetradSequence = initialSequenceMode === 'linked' && initialExtendedChords;
+  const startsTetradSequence = initialExtendedChords && persistedAppSettings.voicingType === 'closed';
   const [key, setKey] = useState<KeyName>(persistedAppSettings.key ?? 'C');
   const [useEnharmonicTonicName, setUseEnharmonicTonicName] = useState(persistedAppSettings.useEnharmonicTonicName ?? false);
   const [modeBaseKey, setModeBaseKey] = useState<KeyName>(persistedAppSettings.modeBaseKey ?? 'C');
@@ -649,12 +768,12 @@ function App(): JSX.Element {
   const [modeFamily, setModeFamily] = useState<ModeFamily>(persistedAppSettings.modeFamily ?? 'major');
   const [extendedChords, setExtendedChords] = useState(initialExtendedChords);
   const [voicing, setVoicing] = useState<ChordVoicing>(
-    startsLinkedTetradSequence && persistedAppSettings.voicingType === 'closed'
+    startsTetradSequence
       ? 'drop2-1'
       : persistedAppSettings.voicing ?? 'closed'
   );
   const [voicingType, setVoicingType] = useState<ChordVoicingType>(
-    startsLinkedTetradSequence && persistedAppSettings.voicingType === 'closed'
+    startsTetradSequence
       ? 'drop2'
       : persistedAppSettings.voicingType ?? 'closed'
   );
@@ -879,6 +998,7 @@ function App(): JSX.Element {
     let previousVoiceMidis: number[] = [];
     const voicingChords = chords.map((chord) => toVoicing(chord, voicing));
     const orderedChords = sequenceDirection === 'descending' ? [...voicingChords].reverse() : voicingChords;
+    const inversionSearchAscending = true;
     const passOrder = [0];
 
     for (const minimumFret of passOrder) {
@@ -896,7 +1016,7 @@ function App(): JSX.Element {
           false,
           false,
           voicingType === 'closed' ? MAX_VOICING_FRET_SPAN : undefined,
-          sequenceDirection === 'ascending',
+          inversionSearchAscending,
           chordIndex === 0,
           previousVoiceMidis,
           false,
@@ -957,7 +1077,7 @@ function App(): JSX.Element {
     }
 
     return steps;
-  }, [activeStringSet, chords, lowerString, sequenceDirection, upperString, voicing]);
+  }, [activeStringSet, chords, lowerString, sequenceDirection, upperString, voicing, voicingType]);
   const globallyLinkedProgressionSteps = useMemo(
     () => findGlobalLinkedPath(
       linkedChordSequence,
@@ -970,6 +1090,30 @@ function App(): JSX.Element {
     ),
     [drop3StringGroup, extendedChords, linkedChordSequence, lowerString, upperString, voicing, voicingType]
   );
+  useEffect(() => {
+    if (sequenceMode !== 'linked' || isSequencePlaying || !globallyLinkedProgressionSteps?.[0]) return;
+    const [firstLower, firstUpper] = globallyLinkedProgressionSteps[0].stringGroup.split('-').map(Number);
+    if (!Number.isFinite(firstLower) || !Number.isFinite(firstUpper)) return;
+
+    if (voicingType === 'drop3') {
+      const nextGroup = firstLower === 6 && firstUpper === 2 ? 0 : firstLower === 5 && firstUpper === 1 ? 1 : null;
+      if (nextGroup !== null && nextGroup !== drop3StringGroup) {
+        setDrop3StringGroup(nextGroup);
+        setLinkedSequenceOctaveOffset(0);
+        setLastChordPositionKeys(null);
+        setActiveStepIndex(0);
+      }
+      return;
+    }
+
+    if (firstLower !== lowerString || firstUpper !== upperString) {
+      setLowerString(firstLower);
+      setUpperString(firstUpper);
+      setLinkedSequenceOctaveOffset(0);
+      setLastChordPositionKeys(null);
+      setActiveStepIndex(0);
+    }
+  }, [drop3StringGroup, globallyLinkedProgressionSteps, isSequencePlaying, lowerString, sequenceMode, upperString, voicingType]);
   const octavedGlobalLinkedProgressionSteps = useMemo(() => {
     if (!globallyLinkedProgressionSteps) return null;
     const offset = linkedSequenceOctaveOffset * 12;
@@ -1032,23 +1176,24 @@ function App(): JSX.Element {
   const activePlaybackStep = activeStepIndex === null
     ? sequenceMode === 'linked' ? visibleProgressionSteps[0] ?? null : null
     : visibleProgressionSteps[activeStepIndex] ?? null;
-  const activePlaybackChordToneSet = useMemo(() => (
-    activePlaybackStep
-      ? new Set(activePlaybackStep.positions.map((position) => position.pitch))
-      : chordToneSet
-  ), [activePlaybackStep, chordToneSet]);
   const activePlaybackStepIndex = activeStepIndex ?? (sequenceMode === 'linked' ? 0 : -1);
+  const activeDiatonicChord = useMemo(() => {
+    if (sequenceMode !== 'diatonic' || !activePlaybackStep) return selectedChord;
+    return chords.find((chord) => chord.romanLabel === activePlaybackStep.label) ?? selectedChord;
+  }, [activePlaybackStep, chords, selectedChord, sequenceMode]);
+  const isDiatonicPlaybackActive = sequenceMode === 'diatonic' && activePlaybackStep !== null;
+  const activePlaybackChordToneSet = useMemo(() => (
+    sequenceMode === 'linked' && activePlaybackStep
+      ? new Set(activePlaybackStep.positions.map((position) => position.pitch))
+      : activeDiatonicChord ? getChordToneSet(activeDiatonicChord) : chordToneSet
+  ), [activeDiatonicChord, activePlaybackStep, chordToneSet, sequenceMode]);
   const activePlaybackLinkedChord = sequenceMode === 'linked'
     ? linkedChordSequence[activePlaybackStepIndex]?.chord
     : undefined;
-  const activePlaybackChordRootPitch = activePlaybackLinkedChord?.rootPitch
-    ?? (activePlaybackStep
-      ? chords.find((chord) => chord.romanLabel === activePlaybackStep.label)?.rootPitch
-      : undefined);
+  const activePlaybackChordRootPitch = activePlaybackLinkedChord?.rootPitch;
   const activePlaybackIsNonDiatonic = sequenceMode === 'linked'
     && activePlaybackStepIndex >= 0
     && linkedChordSequence[activePlaybackStepIndex]?.token.status !== 'diatonic';
-  const hideLinkedFundamentalMarkers = sequenceMode === 'linked';
   const activePlaybackVoicing = activePlaybackStep?.inversion
     ? voicingType === 'closed'
       ? activePlaybackStep.inversion === 1 ? 'closed' : `closed-${activePlaybackStep.inversion}` as ChordVoicing
@@ -1097,13 +1242,38 @@ function App(): JSX.Element {
     );
     return result ? result.positions.map((position) => `${position.string}-${position.fret}`) : [];
   }, [drop3StringGroup, lowerString, selectedChord, upperString, voicing, voicingType]);
+  const displayedVoicing = useMemo<ChordVoicing>(() => {
+    const displayedChord = sequenceMode === 'linked'
+      ? linkedChordSequence[activePlaybackStepIndex]?.chord ?? selectedChord
+      : activeDiatonicChord ?? selectedChord;
+    const displayedPositionKeys = lastChordPositionKeys
+      ?? (activeStepIndex !== null
+        ? visibleProgressionSteps[activeStepIndex]?.positionKeys
+        : sequenceMode === 'linked'
+          ? visibleProgressionSteps[0]?.positionKeys
+          : currentVoicingPositionKeys);
+    if (!displayedChord || !displayedPositionKeys || displayedPositionKeys.length === 0) return voicing;
+    const positions = displayedPositionKeys.map((key) => {
+      const [string, fret] = key.split('-').map(Number);
+      const stringNumber = string as StringNumber;
+      return {
+        string: stringNumber,
+        fret,
+        pitch: getPitchAtPosition(stringNumber, fret, STANDARD_TUNING),
+      };
+    });
+    const physicalInversion = getPhysicalInversion(displayedChord, positions);
+    return voicingType === 'closed'
+      ? physicalInversion === 1 ? 'closed' : `closed-${physicalInversion}` as ChordVoicing
+      : `${voicingType}-${physicalInversion}` as ChordVoicing;
+  }, [activeDiatonicChord, activePlaybackStepIndex, activeStepIndex, currentVoicingPositionKeys, lastChordPositionKeys, linkedChordSequence, selectedChord, sequenceMode, visibleProgressionSteps, voicing, voicingType]);
   const highlightedPositions = useMemo(() => {
     if (sequenceMode === 'linked' && activeStepIndex === null && !isSequencePlaying && lastChordPositionKeys) {
       return new Set(lastChordPositionKeys);
     }
     const activeStep = activeStepIndex === null
-      ? sequenceMode === 'linked' ? activeProgressionSteps[0] ?? null : null
-      : activeProgressionSteps[activeStepIndex];
+      ? sequenceMode === 'linked' ? visibleProgressionSteps[0] ?? null : null
+      : visibleProgressionSteps[activeStepIndex];
     if (!activeStep) {
       return new Set(lastChordPositionKeys ?? currentVoicingPositionKeys);
     }
@@ -1379,7 +1549,7 @@ function App(): JSX.Element {
     setLastChordLowStringMidi(null);
     setLowerString(6);
     setUpperString(enabled ? 3 : 4);
-    if (enabled && sequenceMode === 'linked' && voicingType === 'closed') {
+    if (enabled && voicingType === 'closed') {
       setVoicingType('drop2');
       setVoicing('drop2-1');
     }
@@ -1485,8 +1655,11 @@ function App(): JSX.Element {
 
   const handleVoicingChangeSilent = useCallback((nextVoicing: ChordVoicing) => {
     stopAll();
+    const previewChord = sequenceMode === 'linked'
+      ? linkedChordSequence[activeStepIndex ?? 0]?.chord ?? selectedChord
+      : selectedChord;
     handleVoicingChange(
-      nextVoicing,
+      previewChord ? getVoicingForPhysicalInversion(previewChord, nextVoicing) : nextVoicing,
       undefined,
       false,
       false,
@@ -1494,7 +1667,7 @@ function App(): JSX.Element {
       true,
       []
     );
-  }, [handleVoicingChange, isSequencePlaying, stopAll]);
+  }, [activeStepIndex, handleVoicingChange, isSequencePlaying, linkedChordSequence, selectedChord, sequenceMode, stopAll]);
 
   const handleNotePlay = useCallback((position: FretboardPosition) => {
     playNote(fretToNoteName(position.string - 1, position.fret));
@@ -1543,29 +1716,25 @@ function App(): JSX.Element {
     }
   };
 
-  const currentChordPositions = useMemo(() => {
-    if (!lastChordPositionKeys) return null;
-    return lastChordPositionKeys.map((key) => {
-      const [string, fret] = key.split('-').map(Number);
-      return { string, fret };
-    });
-  }, [lastChordPositionKeys]);
-
   const canShiftOctave = useCallback((direction: 1 | -1) => {
     if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
-      const sourceSteps = globallyLinkedProgressionSteps ?? activeProgressionSteps;
-      const nextOffset = linkedSequenceOctaveOffset + direction;
-      return sourceSteps.every((step) => step.positions.every((position) => {
-        const nextFret = position.fret + nextOffset * 12;
+      const activeStep = activeProgressionSteps[activeStepIndex ?? 0];
+      if (!activeStep) return false;
+      return activeStep.positions.every((position) => {
+        const nextFret = position.fret + direction * 12;
         return nextFret >= 0 && nextFret <= MAX_FRETBOARD_FRET;
-      }));
+      });
     }
-    if (!currentChordPositions || currentChordPositions.length === 0) return false;
-    return currentChordPositions.every((position) => {
-      const nextFret = position.fret + direction * 12;
+    const positionKeys = Array.from(highlightedPositions);
+    if (positionKeys.length === 0) return false;
+    return positionKeys.every((key) => {
+      const [, fretText] = key.split('-');
+      const fret = Number(fretText);
+      if (!Number.isFinite(fret)) return false;
+      const nextFret = fret + direction * 12;
       return nextFret >= 0 && nextFret <= MAX_FRETBOARD_FRET;
     });
-  }, [activeProgressionSteps, currentChordPositions, globallyLinkedProgressionSteps, linkedSequenceOctaveOffset, sequenceMode]);
+  }, [activeProgressionSteps, activeStepIndex, highlightedPositions, sequenceMode]);
 
   const canOctaveUp = canShiftOctave(1);
   const canOctaveDown = canShiftOctave(-1);
@@ -1596,7 +1765,6 @@ function App(): JSX.Element {
     setLinkedSequenceOctaveOffset(0);
     setLastChordPositionKeys(null);
     setActiveStepIndex(0);
-    const previewStep = activeProgressionSteps[activeStepIndex ?? 0];
   }, [activeProgressionSteps, activeStepIndex, canMoveToAdjacentGroup, voicingType]);
 
   const handleOctaveStep = useCallback((direction: 1 | -1) => {
@@ -1604,14 +1772,12 @@ function App(): JSX.Element {
     if (sequenceMode === 'linked' && activeProgressionSteps.length > 0) {
       const activeStep = activeProgressionSteps[activeStepIndex ?? 0];
       if (activeStep) {
-        const shiftedNoteNames = activeStep.positions.map((position) => fretToNoteName(
-          position.string - 1,
-          position.fret + direction * 12
-        ));
-        if (activeStep.positions.every((position) => {
-          const shiftedFret = position.fret + direction * 12;
-          return shiftedFret >= 0 && shiftedFret <= MAX_FRETBOARD_FRET;
-        })) {
+        const shiftedPositions = activeStep.positions.map((position) => ({
+          string: position.string,
+          fret: position.fret + direction * 12,
+        }));
+        if (shiftedPositions.some((position) => position.fret < 0 || position.fret > MAX_FRETBOARD_FRET)) {
+          return;
         }
       }
       setLastChordPositionKeys(null);
@@ -1621,8 +1787,12 @@ function App(): JSX.Element {
       setLinkedSequenceOctaveOffset((offset) => offset + direction);
       return;
     }
-    if (!currentChordPositions || currentChordPositions.length === 0) return;
-    const shiftedPositions = currentChordPositions.map((position) => ({
+    const currentPositions = Array.from(highlightedPositions).map((key) => {
+      const [string, fret] = key.split('-').map(Number);
+      return { string, fret };
+    });
+    if (currentPositions.length === 0) return;
+    const shiftedPositions = currentPositions.map((position) => ({
       string: position.string,
       fret: position.fret + direction * 12,
     }));
@@ -1635,7 +1805,7 @@ function App(): JSX.Element {
     setLastChordVoiceMidis(noteNames.map((note) => Tone.Frequency(note).toMidi()));
     setLastChordLowStringMidi(Tone.Frequency(noteNames[0]).toMidi());
     scheduleChordHighlightClear();
-  }, [activeProgressionSteps, activeStepIndex, canShiftOctave, currentChordPositions, scheduleChordHighlightClear, sequenceMode]);
+  }, [activeProgressionSteps, activeStepIndex, canShiftOctave, highlightedPositions, isSequencePlaying, scheduleChordHighlightClear, sequenceMode]);
 
   const handleDegreeChange = (nextDegree: number) => {
     if (nextDegree < 1 || nextDegree > 7) {
@@ -1759,6 +1929,7 @@ function App(): JSX.Element {
             </span>
           </div>
         )}
+        <div className="control-rail">
         <div className="current-state">
           <span>{selectedChord ? getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName) : 'Sin acorde'}</span>
           <span>{selectedChord?.tones.map((tone) => getDisplayedNoteName(tone.noteName, useEnharmonicTonicName)).join(' - ')}</span>
@@ -1822,6 +1993,10 @@ function App(): JSX.Element {
             setChordSequence('');
             setSequenceMode('diatonic');
           }}
+          onTransposeChordSequence={() => {
+            setChordSequence(transposeChordSequence(chordSequence, 2, effectiveNotation));
+            setLinkedSequenceOctaveOffset(0);
+          }}
           linkedSequenceUnavailable={linkedSequenceUnavailable}
           sequenceMode={sequenceMode}
           onSequenceModeChange={(mode) => {
@@ -1882,37 +2057,44 @@ function App(): JSX.Element {
           canOctaveUp={canUseOctaveControl(1)}
           canOctaveDown={canUseOctaveControl(-1)}
           linkedSequenceOctaveBlocked={sequenceMode === 'linked' && activeProgressionSteps.length > 0 && !canUseOctaveControl(1) && !canUseOctaveControl(-1)}
-          closedDisabled={extendedChords && sequenceMode === 'linked'}
+          closedDisabled={extendedChords}
           linkedStringGroupNavigation={sequenceMode === 'linked' && activeProgressionSteps.length > 0}
           onStringGroupStep={handleStringGroupStep}
           canStringGroupUp={canStringGroupUp}
           canStringGroupDown={canStringGroupDown}
           isSequencePlaying={isSequencePlaying}
-          displayVoicing={isSequencePlaying ? activePlaybackVoicing : undefined}
+          displayVoicing={isSequencePlaying ? activePlaybackVoicing : displayedVoicing}
         />
+        </div>
+        <div className="fretboard-column">
         <h2>{t('fretboard')}</h2>
-        <Fretboard
-          rootPitch={KEY_TO_PITCH[key]}
-          rootIsRed={sequenceMode !== 'linked' && modeDegree === 1}
-          fundamentalRootPitch={KEY_TO_PITCH[modeBaseKey]}
-          chordRootPitch={sequenceMode === 'linked'
-            ? activePlaybackChordRootPitch
-            : selectedChord?.rootPitch}
-          scaleToneSet={scaleToneSet}
-          chordToneSet={activePlaybackChordToneSet}
-          hideScaleTones={sequenceMode === 'linked'}
-          hideFundamentalRootRings={hideLinkedFundamentalMarkers}
-          hideFundamentalRootNotes={hideLinkedFundamentalMarkers}
-          neutralizeRootStyle={hideLinkedFundamentalMarkers}
-          notation={effectiveNotation}
-          highlightedPositions={highlightedPositions}
-          pdfDetails={pdfDetails}
-          onNotePlay={handleNotePlay}
+        <div className="fretboard-stage">
+          <Fretboard
+            rootPitch={KEY_TO_PITCH[key]}
+            rootIsRed={sequenceMode !== 'linked' && modeDegree === 1}
+            fundamentalRootPitch={KEY_TO_PITCH[modeBaseKey]}
+            chordRootPitch={sequenceMode === 'linked'
+              ? activePlaybackChordRootPitch
+              : isDiatonicPlaybackActive
+                ? activeDiatonicChord?.rootPitch
+                : selectedChord?.rootPitch}
+            scaleToneSet={scaleToneSet}
+            chordToneSet={activePlaybackChordToneSet}
+            hideScaleTones={sequenceMode === 'linked'}
+            hideFundamentalRootRings={sequenceMode === 'linked'}
+            hideFundamentalRootNotes={sequenceMode === 'linked'}
+            neutralizeRootStyle={sequenceMode === 'linked'}
+            notation={effectiveNotation}
+            highlightedPositions={highlightedPositions}
+            pdfDetails={pdfDetails}
+            onNotePlay={handleNotePlay}
             hasSequenceSteps={activeProgressionSteps.length > 0 && canExportSequence}
-          isSequencePlaying={isSequencePlaying}
-          onExportSequence={onExportSequence}
+            isSequencePlaying={isSequencePlaying}
+            onExportSequence={onExportSequence}
             sequenceDiagramSteps={sequenceDiagramSteps}
-        />
+          />
+        </div>
+        </div>
       </section>
     </main>
   );

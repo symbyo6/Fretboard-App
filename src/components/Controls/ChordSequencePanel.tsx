@@ -12,10 +12,11 @@ interface ChordSequencePanelProps {
   onSequenceModeChange: (mode: 'diatonic' | 'linked') => void;
   hasMixedChordTypes: boolean;
   onClear: () => void;
+  onTranspose: () => void;
   linkedSequenceUnavailable: boolean;
 }
 
-export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, sequenceMode, onSequenceModeChange, hasMixedChordTypes, onClear, linkedSequenceUnavailable }: ChordSequencePanelProps): JSX.Element {
+export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, sequenceMode, onSequenceModeChange, hasMixedChordTypes, onClear, onTranspose, linkedSequenceUnavailable }: ChordSequencePanelProps): JSX.Element {
   const { language } = useLanguage();
   const isEnglish = language === 'en';
   const diatonicCount = analysis.filter((item) => item.status === 'diatonic').length;
@@ -51,6 +52,9 @@ export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, 
       />
       <button type="button" onClick={onClear} style={clearButtonStyle}>
         {isEnglish ? 'Clear sequence' : 'Limpiar secuencia'}
+      </button>
+      <button type="button" onClick={onTranspose} style={clearButtonStyle}>
+        {isEnglish ? 'Transpose +2 semitones' : 'Transportar +2 semitonos'}
       </button>
       {analysis.length > 0 && (
         <div style={analysisStyle}>
@@ -109,6 +113,42 @@ export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, 
               );
             })}
           </div>
+          {sequenceMode === 'linked'
+            && linkedSequence.length > 0
+            && linkedSequence.every((step) => step.chord && !step.chord.isExtended)
+            && (
+              <div style={triadTableWrapperStyle}>
+                <div style={triadTableTitleStyle}>
+                  {isEnglish ? 'Triad table in use' : 'Tabla de tríadas en uso'}
+                </div>
+                <table style={triadTableStyle}>
+                  <thead>
+                    <tr>
+                      <th style={triadHeaderStyle}>{isEnglish ? 'Transition' : 'Transición'}</th>
+                      <th style={triadHeaderStyle}>Δ</th>
+                      <th style={triadHeaderStyle}>{isEnglish ? 'Source inv.' : 'Inv. origen'}</th>
+                      <th style={triadHeaderStyle}>{isEnglish ? 'Target inv.' : 'Inv. destino'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkedSequence.map((step, index) => {
+                      const previousStep = linkedSequence[index - 1];
+                      const transition = previousStep?.chord && step.chord
+                        ? `${previousStep.chord.romanLabel} → ${step.chord.romanLabel}`
+                        : step.chord?.romanLabel ?? step.token.input;
+                      return (
+                        <tr key={`triad-row-${step.token.input}-${index}`}>
+                          <td style={triadCellStyle}>{transition}</td>
+                          <td style={triadCellStyle}>{step.delta ?? '—'}</td>
+                          <td style={triadCellStyle}>{step.sourceInversion ?? '—'}</td>
+                          <td style={triadCellStyle}>{step.targetInversion ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
         </div>
       )}
     </section>
@@ -128,3 +168,8 @@ const warningStyle: React.CSSProperties = { marginBottom: '0.7rem', padding: '0.
 const clearButtonStyle: React.CSSProperties = { marginTop: '0.7rem', minHeight: 42, padding: '0 0.8rem', border: '1px solid #a8a29e', borderRadius: '0.45rem', background: '#fff', color: '#57534e', cursor: 'pointer', fontSize: '1rem', fontWeight: 700 };
 const chipsStyle: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '0.7rem' };
 const chipStyle: React.CSSProperties = { padding: '0.65rem 1rem', border: '2px solid', borderRadius: '999px', background: '#fafaf9', fontSize: '1.7rem', color: '#44403c' };
+const triadTableWrapperStyle: React.CSSProperties = { marginTop: '1rem', overflowX: 'auto' };
+const triadTableTitleStyle: React.CSSProperties = { marginBottom: '0.45rem', color: '#57534e', fontSize: '1.15rem', fontWeight: 700 };
+const triadTableStyle: React.CSSProperties = { width: '100%', minWidth: 420, borderCollapse: 'collapse', background: '#fafaf9', fontSize: '1rem' };
+const triadHeaderStyle: React.CSSProperties = { padding: '0.5rem 0.65rem', border: '1px solid #d6d3d1', background: '#e7e5e4', color: '#44403c', textAlign: 'left', fontWeight: 700 };
+const triadCellStyle: React.CSSProperties = { padding: '0.5rem 0.65rem', border: '1px solid #e7e5e4', color: '#57534e' };

@@ -2,15 +2,23 @@
 
 import * as Tone from 'tone';
 
+const GUITAR_SAMPLE_NOTES = [
+  'E2', 'G2', 'B2', 'D3', 'F3', 'A3', 'C4', 'E4',
+  'G4', 'B4', 'D5', 'F5', 'A5', 'C6', 'E6',
+] as const;
+
+const GUITAR_SAMPLES = Object.fromEntries(
+  GUITAR_SAMPLE_NOTES.map((note) => [note, `${note}.mp3`])
+);
+
 /**
  * Motor de audio singleton. Se instancia una sola vez para toda la app.
  * `unlock()` debe llamarse desde un click o tap del usuario.
  */
 class AudioEngine {
-  private synth: Tone.PolySynth<Tone.Synth> | null = null;
+  private synth: Tone.Sampler | null = null;
   private reverb: Tone.Reverb | null = null;
-  private previewSynth: Tone.PolySynth<Tone.Synth> | null = null;
-  private previewReverb: Tone.Reverb | null = null;
+  private synthLoaded: Promise<void> | null = null;
   private isUnlockedFlag = false;
   private isMutedFlag = false;
   private volumeDb = -6;
@@ -34,53 +42,48 @@ class AudioEngine {
   /** Desbloquea el AudioContext y construye el grafo de síntesis. */
   async unlock(): Promise<void> {
     const context = Tone.getContext();
-    if (this.isUnlockedFlag && context.state === 'running') {
-      Tone.Destination.mute = false;
-      this.ensureSynthGraph();
-      return;
+    if (!this.isUnlockedFlag || context.state !== 'running') {
+      await Tone.start();
+      if (context.state !== 'running') {
+        await context.resume();
+      }
     }
 
-    await Tone.start();
-    if (context.state !== 'running') {
-      await context.resume();
-    }
-    this.ensureSynthGraph();
+    await this.ensureSynthGraph();
     this.isUnlockedFlag = true;
   }
 
-  private ensureSynthGraph(): void {
-    if (this.synth) return;
+  private ensureSynthGraph(): Promise<void> {
+    if (this.synth) return this.synthLoaded ?? Promise.resolve();
 
-    this.reverb = new Tone.Reverb({ decay: 0.8, wet: 0.1 }).toDestination();
-    this.synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.006, decay: 0.28, sustain: 0.2, release: 0.12 },
+    let resolveLoaded!: () => void;
+    let rejectLoaded!: (error: Error) => void;
+    this.synthLoaded = new Promise<void>((resolve, reject) => {
+      resolveLoaded = resolve;
+      rejectLoaded = reject;
+    });
+
+    this.reverb = new Tone.Reverb({ decay: 1.1, wet: 0.12 }).toDestination();
+    this.synth = new Tone.Sampler({
+      urls: GUITAR_SAMPLES,
+      baseUrl: `${import.meta.env.BASE_URL}soundfonts/guitar-steel/`,
+      attack: 0.004,
+      release: 0.12,
+      onload: resolveLoaded,
+      onerror: rejectLoaded,
     }).connect(this.reverb);
 
-    this.synth.volume.value = -6;
+    this.synth.volume.value = this.isMutedFlag ? -Infinity : this.volumeDb;
     Tone.Destination.mute = false;
-  }
-
-  private stopPreview(): void {
-    this.previewSynth?.releaseAll(Tone.now());
-    this.previewSynth?.dispose();
-    this.previewReverb?.dispose();
-    this.previewSynth = null;
-    this.previewReverb = null;
+    return this.synthLoaded;
   }
 
   playPreviewChord(noteNames: string[], durationSeconds = 1.4, velocity = 0.75): void {
     if (this.isMutedFlag || noteNames.length === 0) return;
-    this.stopPreview();
+    this.ensureSynthGraph();
+    this.resetSynthForNewSound();
     Tone.Destination.mute = false;
-    this.previewReverb = new Tone.Reverb({ decay: 0.8, wet: 0.1 }).toDestination();
-    this.previewSynth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.006, decay: 0.28, sustain: 0.2, release: 0.12 },
-    }).connect(this.previewReverb);
-    this.previewSynth.volume.value = this.volumeDb;
-    this.previewSynth.triggerAttackRelease(noteNames, durationSeconds, Tone.now(), velocity);
-    window.setTimeout(() => this.stopPreview(), (durationSeconds + 0.3) * 1000);
+    this.synth?.triggerAttackRelease(noteNames, durationSeconds, Tone.now(), velocity);
   }
 
   playPreviewMidi(midis: number[], durationSeconds = 1.4, velocity = 0.75): void {
@@ -95,15 +98,9 @@ class AudioEngine {
       Tone.getTransport().cancel(0);
     }
     if (this.synth) {
-      this.synth.volume.value = -Infinity;
       this.synth.releaseAll(now);
     }
-    this.synth?.dispose();
-    this.reverb?.dispose();
-    this.synth = null;
-    this.reverb = null;
-    Tone.Destination.mute = true;
-    this.ensureSynthGraph();
+    Tone.Destination.mute = false;
   }
 
   /** Toca una sola nota. */
@@ -137,6 +134,14 @@ class AudioEngine {
     );
   }
 
+  playSequenceChord(noteNames: string[], durationSeconds: number, velocity = 0.75): void {
+    this.ensureSynthGraph();
+    if (!this.synth || this.isMutedFlag || noteNames.length === 0) return;
+    Tone.Destination.mute = false;
+    this.synth.releaseAll(Tone.now());
+    this.synth.triggerAttackRelease(noteNames, durationSeconds, Tone.now(), velocity);
+  }
+
   playScheduledChord(noteNames: string[], durationSeconds: number, velocity: number, startTime: number): void {
     this.ensureSynthGraph();
     if (!this.synth || this.isMutedFlag || noteNames.length === 0) return;
@@ -162,6 +167,39 @@ class AudioEngine {
     }
     const generation = this.playbackGeneration;
 
+    noteNames.forEach((note, index) => {
+      this.synth!.triggerAttackRelease(
+        note,
+        durationSeconds,
+        startTime + index * noteSpacingSeconds,
+        0.8
+      );
+      if (onNoteStart) {
+        const delayMilliseconds = Math.max(
+          0,
+          (startTime + index * noteSpacingSeconds - Tone.now()) * 1000
+        );
+        const timer = window.setTimeout(() => {
+          this.noteStartTimers.delete(timer);
+          if (generation === this.playbackGeneration) onNoteStart(index);
+        }, delayMilliseconds);
+        this.noteStartTimers.add(timer);
+      }
+    });
+  }
+
+  playSequenceArpeggio(
+    noteNames: string[],
+    noteSpacingSeconds = 0.18,
+    durationSeconds = 0.6,
+    onNoteStart?: (index: number) => void,
+  ): void {
+    this.ensureSynthGraph();
+    if (!this.synth || this.isMutedFlag || noteNames.length === 0) return;
+    Tone.Destination.mute = false;
+    this.synth.releaseAll(Tone.now());
+    const generation = this.playbackGeneration;
+    const startTime = Tone.now();
     noteNames.forEach((note, index) => {
       this.synth!.triggerAttackRelease(
         note,
@@ -217,18 +255,10 @@ class AudioEngine {
   stopAll(): void {
     this.cancelPendingNoteCallbacks();
     const now = Tone.now();
-    if (this.synth) {
-      this.synth.volume.value = -Infinity;
-      this.synth.releaseAll(now);
-    }
-    this.synth?.dispose();
-    this.reverb?.dispose();
-    this.synth = null;
-    this.reverb = null;
-    this.stopPreview();
+    this.synth?.releaseAll(now);
     Tone.Transport.stop();
     Tone.Transport.cancel(0);
-    Tone.Destination.mute = true;
+    Tone.Destination.mute = false;
   }
 
   setVolumeDb(db: number): void {

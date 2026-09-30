@@ -95,7 +95,7 @@ const SECONDARY_ROOT_STYLE = {
   textColor: '#ffffff',
 };
 
-const FRETBOARD_VIEW_STORAGE_KEY = 'fretboard-view-settings-v1';
+const FRETBOARD_VIEW_STORAGE_KEY = 'fretboard-view-settings-v2';
 
 interface FretboardViewSettings {
   imageFormat?: 'pdf' | 'jpeg';
@@ -176,9 +176,12 @@ export function Fretboard({
     if (!element) return;
 
     const updateZoom = () => {
-      const availableWidth = element.clientWidth;
-      if (availableWidth <= 0) return;
-      const fitZoom = availableWidth / layout.totalWidth;
+      const availableWidth = scrollContainerRef.current?.clientWidth ?? 0;
+      const availableHeight = scrollContainerRef.current?.clientHeight ?? 0;
+      if (availableWidth <= 0 || availableHeight <= 0) return;
+      const widthZoom = availableWidth / layout.totalWidth;
+      const heightZoom = availableHeight / layout.totalHeight;
+      const fitZoom = Math.min(widthZoom, heightZoom);
       setZoom(Math.min(1.6, fitZoom));
     };
 
@@ -188,7 +191,7 @@ export function Fretboard({
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [layout.totalWidth, autoFit]);
+  }, [layout.totalHeight, layout.totalWidth, autoFit]);
 
   useEffect(() => {
     if (!highlightWindow || !scrollContainerRef.current) return;
@@ -221,7 +224,7 @@ export function Fretboard({
       const classification = classifyPitch(pitchClass, scaleToneSet, chordToneSet);
       categoryByPitch.set(
         pitchClass,
-        pitchClass === rootPitch
+        pitchClass === rootPitch && rootIsRed
           ? 'root'
           : classification === 'chord-tone'
             ? 'chordTone'
@@ -283,14 +286,26 @@ export function Fretboard({
   };
 
   return (
-    <div ref={wrapperRef} className="fretboard-wrapper" style={{ position: 'relative' }}>
+    <div
+      ref={wrapperRef}
+      className="fretboard-wrapper"
+      style={{
+        position: 'relative',
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
       <div
         className="fretboard-zoom-controls"
         style={{
           display: 'flex',
-          gap: '0.5rem',
-          justifyContent: 'flex-end',
-          marginBottom: '0.5rem',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: '0.35rem',
+          justifyContent: 'flex-start',
+          marginBottom: '0.35rem',
         }}
       >
         <button
@@ -332,8 +347,8 @@ export function Fretboard({
               onClick={() => setImageFormat(format)}
               style={{
                 ...imageFormatButtonStyle,
-                background: imageFormat === format ? '#0f766e' : 'white',
-                color: imageFormat === format ? 'white' : '#292524',
+                background: imageFormat === format ? '#0f766e' : '#162233',
+                color: '#f8fafc',
               }}
             >
               {format.toUpperCase()}
@@ -348,7 +363,7 @@ export function Fretboard({
           title={`${imageFormat.toUpperCase()} ${t('highlightedFrets')}`}
           style={pdfButtonStyle}
         >
-          {imageFormat.toUpperCase()} {t('highlightedFrets')}
+          {t('highlightedFrets')}
         </button>
         <button
           type="button"
@@ -357,7 +372,7 @@ export function Fretboard({
           title={`${imageFormat.toUpperCase()} ${t('fullFretboard')}`}
           style={pdfButtonStyle}
         >
-          {imageFormat.toUpperCase()} {t('fullFretboard')}
+          {t('fullFretboard')}
         </button>
         {onExportSequence && (
           <button
@@ -368,7 +383,7 @@ export function Fretboard({
             title={`${imageFormat.toUpperCase()} ${t('tabSequence')}`}
             style={pdfButtonStyle}
           >
-            {imageFormat.toUpperCase()} {t('tabSequence')}
+            Tab
           </button>
         )}
         {onExportSequence && sequenceDiagramSteps.length > 0 && (
@@ -382,7 +397,7 @@ export function Fretboard({
             title="Export one fretboard diagram per linked chord"
             style={pdfButtonStyle}
           >
-            {imageFormat.toUpperCase()} sequence diagrams
+            Seq. diagrams
           </button>
         )}
       </div>
@@ -391,9 +406,14 @@ export function Fretboard({
         ref={scrollContainerRef}
         className="fretboard-scroll-container"
         style={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
           overflowX: 'auto',
-          overflowY: 'hidden',
-          touchAction: 'pan-x pinch-zoom',
+          overflowY: 'auto',
+          touchAction: 'pan-x pan-y pinch-zoom',
           WebkitOverflowScrolling: 'touch',
           borderRadius: '0.75rem',
           background: '#fdf6ec',
@@ -517,23 +537,18 @@ export function Fretboard({
             ))}
 
           {(() => {
-            const playedFundamentalRootKey = renderablePositions.find(({ position, pitch }) => (
-              pitch === fundamentalRootPitch
-              && highlightedPositions?.has(`${position.string}-${position.fret}`)
-            ));
-            const playedFundamentalRootPositionKey = playedFundamentalRootKey
-              ? `${playedFundamentalRootKey.position.string}-${playedFundamentalRootKey.position.fret}`
-              : null;
-
-            return renderablePositions.map(({ position, pitch, category }) => {
+          return renderablePositions.map(({ position, pitch, category }) => {
+            const isActiveChordRoot = chordRootPitch !== undefined && pitch === chordRootPitch;
             const isSecondaryRoot = chordRootPitch !== undefined
               && chordRootPitch !== rootPitch
               && pitch === chordRootPitch;
-            const isActiveChordRoot = chordRootPitch !== undefined && pitch === chordRootPitch;
             const isLinkedChordMode = hideScaleTones;
             const isSequenceChordTone = isLinkedChordMode && chordToneSet.has(pitch);
             const isModeRootGreen = category === 'root' && !rootIsRed && !hideFundamentalRootNotes;
             const isFundamentalRoot = pitch === fundamentalRootPitch;
+            const isFundamentalInChord = !isLinkedChordMode
+              && isFundamentalRoot
+              && chordToneSet.has(pitch);
             const { x, y } = getPixelPosition(position);
             const label = resolveLabel(position, pitch);
             const isRootInChord = category === 'root' && chordToneSet.has(pitch);
@@ -551,14 +566,15 @@ export function Fretboard({
                 ? layout.noteRadius * 0.48
                 : layout.noteRadius * 0.75;
             const isHighlighted = highlightedPositions?.has(`${position.string}-${position.fret}`) ?? false;
-            const isPlayedFundamentalRoot = `${position.string}-${position.fret}` === playedFundamentalRootPositionKey;
             const style = isLinkedChordMode && isActiveChordRoot
               ? SECONDARY_ROOT_STYLE
               : isLinkedChordMode && isSequenceChordTone
                 ? CATEGORY_STYLES.chordTone
-              : isPlayedFundamentalRoot && !neutralizeRootStyle
-              ? CATEGORY_STYLES.root
+              : isFundamentalInChord
+                ? CATEGORY_STYLES.root
               : isActiveChordRoot
+                ? SECONDARY_ROOT_STYLE
+              : isSecondaryRoot
                 ? SECONDARY_ROOT_STYLE
                 : neutralizeRootStyle && category === 'root'
                   ? CATEGORY_STYLES.chordTone
@@ -613,7 +629,7 @@ export function Fretboard({
                   />
                 )}
 
-                {!hideFundamentalRootRings && !isPlayedFundamentalRoot && isFundamentalRoot && !chordToneSet.has(pitch) && (
+                {!hideFundamentalRootRings && !isLinkedChordMode && isFundamentalRoot && !chordToneSet.has(pitch) && (
                   <circle
                     r={radius + (isMutedRoot ? 6 : 5)}
                     fill="none"
@@ -637,7 +653,7 @@ export function Fretboard({
                 )}
               </g>
             );
-            });
+          });
           })()}
 
           {children?.({ getPixelPosition, layout })}
@@ -673,42 +689,43 @@ export function Fretboard({
 }
 
 const zoomButtonStyle: React.CSSProperties = {
-  minWidth: 44,
-  minHeight: 44,
-  borderRadius: '0.5rem',
-  border: '1px solid #d6d3d1',
-  background: 'white',
-  fontSize: '1.1rem',
+  minWidth: 34,
+  minHeight: 34,
+  borderRadius: '0.375rem',
+  border: '1px solid #475569',
+  background: '#162233',
+  color: '#f8fafc',
+  fontSize: '0.95rem',
   cursor: 'pointer',
 };
 
 const pdfButtonStyle: React.CSSProperties = {
-  minHeight: 58,
-  padding: '0 1.2rem',
-  borderRadius: '0.5rem',
-  border: '1px solid #0f766e',
-  background: '#f0fdfa',
-  color: '#0f766e',
-  fontSize: '1.25rem',
+  minHeight: 34,
+  padding: '0 0.65rem',
+  borderRadius: '0.375rem',
+  border: '1px solid #2dd4bf',
+  background: '#162233',
+  color: '#ccfbf1',
+  fontSize: '0.78rem',
   fontWeight: 700,
   cursor: 'pointer',
 };
 
 const imageFormatStyle: React.CSSProperties = {
   display: 'inline-flex',
-  alignItems: 'stretch',
-  border: '1px solid #0f766e',
-  borderRadius: '0.5rem',
+  alignItems: 'center',
+  border: '1px solid #475569',
+  borderRadius: '0.375rem',
   overflow: 'hidden',
 };
 
 const imageFormatButtonStyle: React.CSSProperties = {
-  minHeight: 58,
-  minWidth: 72,
-  padding: '0 0.8rem',
+  minHeight: 34,
+  minWidth: 42,
+  padding: '0 0.55rem',
   border: 'none',
-  borderRight: '1px solid #0f766e',
-  fontSize: '1.05rem',
+  borderRight: '1px solid #475569',
+  fontSize: '0.78rem',
   fontWeight: 700,
   cursor: 'pointer',
 };

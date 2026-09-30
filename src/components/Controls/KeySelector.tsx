@@ -12,11 +12,10 @@ interface KeySelectorProps {
   onChange: (pitch: PitchClass) => void;
 }
 
-const ALL_PITCHES: PitchClass[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
 const SHARP_TONIC_NAMES: KeyName[] = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
 const FLAT_TONIC_NAMES: KeyName[] = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
 
-/** Selector circular de las 12 tónicas. */
+/** Selector desplegable de las 12 tónicas. */
 export function KeySelector({
   value,
   useEnharmonicTonicName,
@@ -48,45 +47,16 @@ export function KeySelector({
         <span>{t('enharmonicName')}</span>
       </button>
 
-      <div
-        role="radiogroup"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(6, minmax(clamp(32px, 9vw, 44px), 1fr))',
-          gap: 'clamp(0.2rem, 1.2vw, 0.4rem)',
-        }}
+      <select
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value) as PitchClass)}
+        aria-label={t('tonality')}
+        style={selectStyle}
       >
-        {ALL_PITCHES.map((pitch) => {
-          const isSelected = pitch === value;
-          const label = useEnharmonicTonicName
-            ? SHARP_TONIC_NAMES[pitch]
-            : FLAT_TONIC_NAMES[pitch];
-
-          return (
-            <button
-              key={pitch}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              onClick={() => onChange(pitch)}
-              style={{
-                minWidth: 'clamp(32px, 9vw, 44px)',
-                minHeight: 'clamp(34px, 9vw, 44px)',
-                borderRadius: '0.6rem',
-                border: isSelected ? '2px solid #4338ca' : '1px solid #d6d3d1',
-                background: isSelected ? '#6366f1' : 'white',
-                color: isSelected ? 'white' : '#292524',
-                fontWeight: isSelected ? 700 : 500,
-                fontSize: 'clamp(0.72rem, 2.8vw, 0.95rem)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </div>
+        {(useEnharmonicTonicName ? SHARP_TONIC_NAMES : FLAT_TONIC_NAMES).map((label, pitch) => (
+          <option key={pitch} value={pitch}>{label}</option>
+        ))}
+      </select>
     </fieldset>
   );
 }
@@ -112,5 +82,17 @@ const enharmonicToggleStyle: React.CSSProperties = {
   borderRadius: '0.6rem',
   fontWeight: 700,
   fontSize: '1.35rem',
+  cursor: 'pointer',
+};
+
+const selectStyle: React.CSSProperties = {
+  width: '100%',
+  minHeight: 88,
+  borderRadius: '0.5rem',
+  border: '1px solid #d6d3d1',
+  padding: '0 1.2rem',
+  fontSize: '1.8rem',
+  background: 'white',
+  color: '#292524',
   cursor: 'pointer',
 };

@@ -126,6 +126,36 @@ export function DegreeSelector({
         </div>
       </div>
 
+      <div className="degree-selector-audio">
+        <button
+          type="button"
+          onClick={onToggleMuted}
+          aria-pressed={!isMuted}
+          aria-label={isMuted ? 'Activar sonido' : 'Desactivar sonido'}
+          title={isMuted ? 'Sonido desactivado' : 'Sonido activado'}
+          className={isMuted ? 'audio-toggle audio-toggle-muted' : 'audio-toggle'}
+          style={{
+            minWidth: 420,
+            minHeight: 168,
+            flexShrink: 0,
+            alignSelf: 'center',
+            borderRadius: '999px',
+            border: 'none',
+            background: isMuted ? '#dc2626' : '#16a34a',
+            color: 'white',
+            fontSize: '3.9rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1.5rem',
+          }}
+        >
+          {isMuted ? `🔇 ${t('audioOff')}` : `🔊 ${t('audioOn')}`}
+        </button>
+      </div>
+
       <div className="degree-selector-red-buttons" style={chordRowStyle}>
         <div style={rangeWrapperStyle}>
           <span style={modeLegendStyle}>{t('diatonicDegrees')}</span>
@@ -152,6 +182,7 @@ export function DegreeSelector({
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
+                disabled={scaleControlsMuted}
                 onClick={() => (onChordSelect ?? onChange)(chord.degree)}
                 style={{
                   minWidth: 'clamp(120px, 33vw, 168px)',
@@ -164,7 +195,8 @@ export function DegreeSelector({
                   color: isSelected ? 'white' : '#292524',
                   fontWeight: 700,
                   fontSize: 'clamp(2.16rem, 8.4vw, 3rem)',
-                  cursor: 'pointer',
+                  cursor: scaleControlsMuted ? 'not-allowed' : 'pointer',
+                  opacity: scaleControlsMuted ? 0.55 : 1,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -183,34 +215,6 @@ export function DegreeSelector({
           })}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={onToggleMuted}
-          aria-pressed={!isMuted}
-          aria-label={isMuted ? 'Activar sonido' : 'Desactivar sonido'}
-          title={isMuted ? 'Sonido desactivado' : 'Sonido activado'}
-          className={isMuted ? 'audio-toggle audio-toggle-muted' : 'audio-toggle'}
-          style={{
-            minWidth: 140,
-            minHeight: 56,
-            flexShrink: 0,
-            alignSelf: 'center',
-            marginLeft: '8rem',
-            borderRadius: '999px',
-            border: 'none',
-            background: isMuted ? '#dc2626' : '#16a34a',
-            color: 'white',
-            fontSize: '1.3rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '0.5rem',
-          }}
-        >
-          {isMuted ? `🔇 ${t('audioOff')}` : `🔊 ${t('audioOn')}`}
-        </button>
       </div>
       <div className="degree-selector-summary" style={selectionSummaryRowStyle}>
         <div style={selectionSummaryStyle} aria-label="Tonalidad actual">

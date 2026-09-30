@@ -1,0 +1,7 @@
+The guitar samples in guitar-steel/ are derived from FluidR3_GM and distributed
+under the Creative Commons Attribution 3.0 license (CC BY 3.0):
+https://creativecommons.org/licenses/by/3.0/
+
+Source: MIDI.js Soundfonts, https://github.com/gleitz/midi-js-soundfonts
+The samples have been extracted from the acoustic_guitar_steel instrument for
+use with Tone.Sampler. FluidR3_GM was created by Frank Wen.
