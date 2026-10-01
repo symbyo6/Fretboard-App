@@ -5,6 +5,7 @@ node_modules/
 dist/
 build/
 /Fretboard-App-Standalone/electron.exe
+/release/win-unpacked.tmp/electron.exe
 /release-current/win-unpacked/Fretboard App.exe
 /release-rebuild/win-unpacked/Fretboard App.exe
 
