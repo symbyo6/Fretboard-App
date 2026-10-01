@@ -66,6 +66,10 @@ button {
   grid-row: 3;
 }
 
+.degree-selector-layout.degree-selector-linked .degree-selector-playing {
+  grid-row: 1;
+}
+
 @media (max-width: 720px) {
   .degree-selector-layout {
     grid-template-columns: 1fr;
@@ -78,6 +82,10 @@ button {
   .degree-selector-summary,
   .degree-selector-playing {
     grid-column: 1;
+    grid-row: auto;
+  }
+
+  .degree-selector-layout.degree-selector-linked .degree-selector-playing {
     grid-row: auto;
   }
 }
@@ -118,7 +126,8 @@ button {
   grid-column: 1;
   grid-row: 3;
   min-height: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -140,6 +149,11 @@ button {
   transform: scale(0.24);
   transform-origin: top left;
 }
+
+  .control-rail > section[aria-label="Panel de controles"][data-sequence-mode="linked"],
+  .control-rail > section[aria-label="Controls panel"][data-sequence-mode="linked"] {
+    height: 1160px !important;
+  }
 
 .control-rail > section[aria-label="Panel de controles"] > div:nth-child(2),
 .control-rail > section[aria-label="Controls panel"] > div:nth-child(2) {
@@ -174,23 +188,33 @@ button {
 .control-rail > section[aria-label="Controls panel"] + div {
   grid-column: 1;
   grid-row: 3;
-  transform: scale(0.45);
+  transform: translateY(64px) scale(0.45);
   transform-origin: top left;
   width: 222%;
   height: 170px;
   margin: 0;
 }
 
+  .control-rail.sequence-linked-mode > section[aria-label="Panel de controles"] + div,
+  .control-rail.sequence-linked-mode > section[aria-label="Controls panel"] + div {
+    transform: translateY(8px) scale(0.45);
+  }
+
 .control-rail > section[aria-label="Panel de controles"] + div + div,
 .control-rail > section[aria-label="Controls panel"] + div + div {
   grid-column: 2;
   grid-row: 3;
-  transform: scale(0.45);
+    transform: translateY(52px) scale(0.45);
   transform-origin: top left;
   width: 222%;
   height: 180px;
   margin: 0;
 }
+
+  .control-rail [role="radiogroup"][aria-label^="Inversiones drop"] button {
+    min-width: 50px !important;
+    width: 50px !important;
+  }
 
 .control-rail > section,
 .control-rail > .current-state,
@@ -276,17 +300,24 @@ button {
   font-size: 0.72rem !important;
 }
 
+  .control-rail .language-button {
+    min-width: 96px !important;
+    min-height: 96px !important;
+    padding: 0 1.95rem !important;
+    font-size: 2.28rem !important;
+  }
+
 .control-rail [aria-label="Secuencia de acordes"] label,
 .control-rail [aria-label="Chord sequence"] label {
-  margin-bottom: 0.25rem !important;
-  font-size: 0.75rem !important;
+    margin-bottom: 0.75rem !important;
+    font-size: 2.25rem !important;
 }
 
 .control-rail [aria-label="Secuencia de acordes"] input,
 .control-rail [aria-label="Chord sequence"] input {
-  min-height: 34px !important;
-  padding: 0 0.55rem !important;
-  font-size: 0.8rem !important;
+    min-height: 102px !important;
+    padding: 0 1.65rem !important;
+    font-size: 2.4rem !important;
 }
 
 .control-rail > .current-state {
@@ -321,11 +352,154 @@ button {
   background: rgba(17, 24, 39, 0.96);
 }
 
+.fretboard-column > .sequence-workspace {
+  flex: 0 0 auto;
+  margin: 0.1rem 0 1.5rem;
+  margin-bottom: 1.5rem !important;
+  padding: 0.55rem 0.7rem;
+  border-radius: 0.5rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-panel-title {
+  margin-bottom: 0.35rem !important;
+  font-size: 1rem !important;
+  line-height: 1.2;
+}
+
+.fretboard-column > .sequence-workspace .sequence-mode-group {
+  gap: 0.4rem;
+  margin-bottom: 0.45rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-mode-button {
+  min-width: 0;
+  min-height: 38px;
+  padding: 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-input-label {
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-chord-input {
+  display: block;
+  min-height: 64px;
+  padding: 0.4rem 0.55rem;
+  border-radius: 0.35rem;
+  font-size: 0.95rem;
+  line-height: 1.3;
+  resize: vertical;
+}
+
+.fretboard-column > .sequence-workspace .sequence-utility-button {
+  min-height: 30px;
+  margin: 0.35rem 0.35rem 0 0;
+  padding: 0 0.55rem;
+  font-size: 0.78rem;
+}
+
+.sequence-transpose-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.sequence-transpose-trigger {
+  display: inline-flex;
+  align-items: center;
+  list-style: none;
+  cursor: pointer;
+}
+
+.sequence-transpose-trigger::-webkit-details-marker {
+  display: none;
+}
+
+.sequence-transpose-options {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 0.3rem);
+  right: 0;
+  width: min(19rem, calc(100vw - 2rem));
+  max-height: min(60vh, 24rem);
+  overflow-y: auto;
+  padding: 0.6rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.4rem;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.22);
+}
+
+.sequence-transpose-direction + .sequence-transpose-direction {
+  margin-top: 0.65rem;
+}
+
+.sequence-transpose-heading {
+  margin-bottom: 0.35rem;
+  color: #334155;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sequence-transpose-option-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.25rem;
+}
+
+.sequence-transpose-option {
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.3rem;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.fretboard-column > .sequence-workspace .sequence-analysis {
+  margin-top: 0.45rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-analysis-summary {
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-chips {
+  gap: 0.35rem;
+}
+
+.fretboard-column > .sequence-workspace .sequence-chip {
+  padding: 0.25rem 0.45rem;
+  border-width: 1px;
+  border-radius: 0.35rem;
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
+.fretboard-column > .sequence-workspace .sequence-chip:focus-visible {
+  outline: 2px solid #0f766e;
+  outline-offset: 2px;
+}
+
+.fretboard-column > .sequence-workspace .sequence-chip:disabled {
+  cursor: not-allowed;
+}
+
 .fretboard-stage {
   display: flex;
   flex: 1;
   min-height: 0;
   flex-direction: column;
+}
+
+.fretboard-column > .string-groups-below-fretboard {
+  flex: 0 0 auto;
+  color: #e2e8f0;
 }
 
 .fretboard-column h2 {

@@ -2,6 +2,7 @@ import React from 'react';
 import { useLanguage } from '../../i18n';
 import type { ParsedChordToken } from '../../lib/theory/chordSequence';
 import type { LinkedChordStep } from '../../lib/theory/voiceLeading';
+import type { ProgressionStep } from '../../hooks/useProgression';
 
 interface ChordSequencePanelProps {
   value: string;
@@ -10,13 +11,17 @@ interface ChordSequencePanelProps {
   linkedSequence: LinkedChordStep[];
   sequenceMode: 'diatonic' | 'linked';
   onSequenceModeChange: (mode: 'diatonic' | 'linked') => void;
+  playbackSteps: ProgressionStep[];
+  activeStepIndex: number | null;
+  isSequencePlaying: boolean;
+  onStepPreview: (index: number) => void;
   hasMixedChordTypes: boolean;
   onClear: () => void;
-  onTranspose: () => void;
+  onTranspose: (semitones: number) => void;
   linkedSequenceUnavailable: boolean;
 }
 
-export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, sequenceMode, onSequenceModeChange, hasMixedChordTypes, onClear, onTranspose, linkedSequenceUnavailable }: ChordSequencePanelProps): JSX.Element {
+export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, sequenceMode, onSequenceModeChange, playbackSteps, activeStepIndex, isSequencePlaying, onStepPreview, hasMixedChordTypes, onClear, onTranspose, linkedSequenceUnavailable }: ChordSequencePanelProps): JSX.Element {
   const { language } = useLanguage();
   const isEnglish = language === 'en';
   const diatonicCount = analysis.filter((item) => item.status === 'diatonic').length;
@@ -24,13 +29,14 @@ export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, 
   const hasInvalid = analysis.some((item) => item.status === 'invalid');
 
   return (
-    <section aria-label={isEnglish ? 'Chord sequence' : 'Secuencia de acordes'} style={panelStyle}>
-      <div style={headingStyle}>{isEnglish ? 'Linked chord sequence' : 'Secuencia de acordes enlazada'}</div>
-      <div role="group" aria-label={isEnglish ? 'Sequence source' : 'Fuente de secuencia'} style={modeStyle}>
+    <section className="sequence-workspace" aria-label={isEnglish ? 'Chord sequence' : 'Secuencia de acordes'} style={panelStyle}>
+      <div className="sequence-panel-title" style={headingStyle}>{isEnglish ? 'Sequence mode' : 'Modo de secuencia'}</div>
+      <div className="sequence-mode-group" role="group" aria-label={isEnglish ? 'Sequence source' : 'Fuente de secuencia'} style={modeStyle}>
         {(['diatonic', 'linked'] as const).map((mode) => (
           <button
             key={mode}
             type="button"
+            className="sequence-mode-button"
             aria-pressed={sequenceMode === mode}
             onClick={() => onSequenceModeChange(mode)}
             style={{ ...modeButtonStyle, background: sequenceMode === mode ? '#0f766e' : 'white', color: sequenceMode === mode ? 'white' : '#292524' }}
@@ -39,33 +45,68 @@ export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, 
           </button>
         ))}
       </div>
-      <label htmlFor="chord-sequence-input" style={labelStyle}>
+      {sequenceMode === 'linked' && (
+      <>
+      <label className="sequence-input-label" htmlFor="chord-sequence-input" style={labelStyle}>
         {isEnglish ? 'American chord symbols' : 'Cifrado americano'}
       </label>
-      <input
+      <textarea
+        className="sequence-chord-input"
         id="chord-sequence-input"
+        rows={3}
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={isEnglish ? 'Dm7 - G7 - Cmaj7' : 'Dm7 - G7 - Cmaj7'}
+        placeholder=""
         aria-label={isEnglish ? 'American chord sequence' : 'Secuencia de acordes en cifrado americano'}
         style={inputStyle}
       />
-      <button type="button" onClick={onClear} style={clearButtonStyle}>
+      <button className="sequence-utility-button" type="button" onClick={onClear} style={clearButtonStyle}>
         {isEnglish ? 'Clear sequence' : 'Limpiar secuencia'}
       </button>
-      <button type="button" onClick={onTranspose} style={clearButtonStyle}>
-        {isEnglish ? 'Transpose +2 semitones' : 'Transportar +2 semitonos'}
-      </button>
-      {analysis.length > 0 && (
-        <div style={analysisStyle}>
-          {sequenceMode === 'diatonic' && (
-            <div style={noticeStyle}>
-              {isEnglish
-                ? 'Sequence entered. Select Linked sequence to use these chords.'
-                : 'Secuencia introducida. Selecciona Secuencia enlazada para usar estos acordes.'}
+      <details className="sequence-transpose-menu">
+        <summary className="sequence-utility-button sequence-transpose-trigger">
+          {isEnglish ? 'Transpose' : 'Transportar'}
+        </summary>
+        <div className="sequence-transpose-options">
+          {[1, -1].map((direction) => (
+            <div className="sequence-transpose-direction" key={direction}>
+              <div className="sequence-transpose-heading">
+                {direction > 0
+                  ? (isEnglish ? 'Transpose up (semitones)' : 'Subir (semitonos)')
+                  : (isEnglish ? 'Transpose down (semitones)' : 'Bajar (semitonos)')}
+              </div>
+              <div className="sequence-transpose-option-grid">
+                {Array.from({ length: 12 }, (_, index) => index + 1).map((amount) => {
+                  const semitones = direction * amount;
+                  const label = `${direction > 0 ? '+' : '-'}${amount}`;
+                  const actionLabel = direction > 0
+                    ? (isEnglish ? `Transpose up ${amount} semitones` : `Subir ${amount} semitonos`)
+                    : (isEnglish ? `Transpose down ${amount} semitones` : `Bajar ${amount} semitonos`);
+                  return (
+                    <button
+                      key={semitones}
+                      className="sequence-transpose-option"
+                      type="button"
+                      aria-label={actionLabel}
+                      title={actionLabel}
+                      onClick={(event) => {
+                        onTranspose(semitones);
+                        const menu = event.currentTarget.closest('details');
+                        if (menu) menu.open = false;
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          )}
-          <div style={{ ...summaryStyle, color: hasInvalid || hasChromatic ? '#b45309' : '#166534' }}>
+          ))}
+        </div>
+      </details>
+      {analysis.length > 0 && (
+        <div className="sequence-analysis" style={analysisStyle}>
+          <div className="sequence-analysis-summary" style={{ ...summaryStyle, color: hasInvalid || hasChromatic ? '#b45309' : '#166534' }}>
             {hasInvalid
               ? (isEnglish ? 'Invalid chord symbol' : 'Símbolo de acorde no válido')
               : hasChromatic
@@ -73,43 +114,64 @@ export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, 
                 : (isEnglish ? 'Fully diatonic sequence' : 'Secuencia completamente diatónica')}
           </div>
           {hasMixedChordTypes && (
-            <div style={warningStyle}>
+            <div className="sequence-warning" style={warningStyle}>
               {isEnglish
                 ? 'Mixed triads and tetrads: linking is disabled until all chords use the same number of voices.'
                 : 'La secuencia mezcla tríadas y tétradas: el enlace está deshabilitado hasta usar el mismo número de voces.'}
             </div>
           )}
           {sequenceMode === 'linked' && linkedSequenceUnavailable && !hasMixedChordTypes && !hasInvalid && (
-            <div style={warningStyle}>
+            <div className="sequence-warning" style={warningStyle}>
               {isEnglish
                 ? 'No physical voicing fits this sequence with the current inversion, voicing, string group, and fret range. Try another group, voicing, or octave.'
                 : 'Ninguna forma física acomoda esta secuencia con la inversión, voicing, grupo de cuerdas y rango actuales. Prueba otro grupo, voicing u octava.'}
             </div>
           )}
-          <div style={chipsStyle}>
+          <div className="sequence-chips" style={chipsStyle}>
             {(sequenceMode === 'linked' ? linkedSequence : analysis).map((item, index) => {
               const token = 'token' in item ? item.token : item;
               const status = 'linkStatus' in item
                 ? item.linkStatus === 'unavailable' ? 'invalid' : item.linkStatus === 'initial' || item.linkStatus === 'linked' ? 'diatonic' : 'chromatic'
                 : item.status;
               const chord = 'chord' in item ? item.chord : item.chord;
+              const linkedInversion = playbackSteps[index]?.inversion ?? null;
+              const details = [
+                token.input,
+                chord?.romanLabel,
+                token.reason,
+                linkedInversion ? `inversion ${linkedInversion}` : '',
+                'delta' in item && item.delta ? `voice-leading delta ${item.delta}` : '',
+              ].filter(Boolean).join(' · ');
+              const playLabel = isEnglish
+                ? `Play ${token.input || 'chord'}${linkedInversion ? `, linked inversion ${linkedInversion}` : ''}`
+                : `Reproducir ${token.input || 'acorde'}${linkedInversion ? `, inversión enlazada ${linkedInversion}` : ''}`;
+              const isActive = activeStepIndex === index;
               return (
-              <span
+              <button
                 key={`${token.input}-${index}`}
-                title={token.reason}
-                style={{ ...chipStyle, borderColor: status === 'invalid' ? '#dc2626' : status === 'chromatic' ? '#d97706' : '#16a34a' }}
+                type="button"
+                className="sequence-chip"
+                aria-label={playLabel}
+                aria-pressed={isActive}
+                disabled={!playbackSteps[index] || isSequencePlaying}
+                onClick={() => onStepPreview(index)}
+                title={details}
+                style={{
+                  ...chipStyle,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  fontFamily: 'inherit',
+                  textAlign: 'left',
+                  cursor: !playbackSteps[index] || isSequencePlaying ? 'not-allowed' : 'pointer',
+                  opacity: isSequencePlaying ? 0.6 : 1,
+                  background: isActive ? '#dcfce7' : chipStyle.background,
+                  color: isActive ? '#166534' : chipStyle.color,
+                  boxShadow: isActive ? '0 0 0 2px #0f766e' : undefined,
+                  borderColor: status === 'invalid' ? '#dc2626' : status === 'chromatic' ? '#d97706' : '#16a34a',
+                }}
               >
-                {token.input || '—'} {chord ? `· ${chord.romanLabel}` : ''}
-                {token.status === 'diatonic'
-                  ? (isEnglish ? ' · diatonic chord' : ' · acorde diatónico')
-                  : token.rootIsDiatonic
-                    ? (isEnglish ? ' · diatonic root / chromatic quality' : ' · raíz diatónica / especie cromática')
-                    : token.status === 'chromatic'
-                      ? (isEnglish ? ' · chromatic root and quality' : ' · raíz y especie cromáticas')
-                      : ''}
-                {'targetInversion' in item && item.targetInversion ? ` · inv. ${item.targetInversion}` : ''}
-                {'delta' in item && item.delta ? ` · Δ${item.delta}` : ''}
-              </span>
+                {token.input || '—'}
+              </button>
               );
             })}
           </div>
@@ -151,23 +213,24 @@ export function ChordSequencePanel({ value, onChange, analysis, linkedSequence, 
             )}
         </div>
       )}
+      </>
+      )}
     </section>
   );
 }
 
-const panelStyle: React.CSSProperties = { padding: '1.8rem', border: '1px solid #d6d3d1', borderRadius: '0.9rem', background: '#fff' };
-const headingStyle: React.CSSProperties = { fontSize: '3rem', lineHeight: 1.1, fontWeight: 700, color: '#292524', marginBottom: '1.2rem' };
-const modeStyle: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '0.8rem', marginBottom: '1.2rem' };
-const modeButtonStyle: React.CSSProperties = { minHeight: 96, padding: '0 1.5rem', border: '1px solid #d6d3d1', borderRadius: '0.7rem', cursor: 'pointer', fontSize: '2.1rem', fontWeight: 700 };
-const labelStyle: React.CSSProperties = { display: 'block', color: '#57534e', fontSize: '2rem', fontWeight: 600, marginBottom: '0.6rem' };
-const inputStyle: React.CSSProperties = { width: '100%', minHeight: 132, padding: '0 1.5rem', border: '2px solid #a8a29e', borderRadius: '0.7rem', fontSize: '2.7rem', color: '#292524' };
-const analysisStyle: React.CSSProperties = { marginTop: '1.2rem' };
-const summaryStyle: React.CSSProperties = { fontSize: '2rem', lineHeight: 1.2, fontWeight: 700, marginBottom: '0.8rem' };
-const noticeStyle: React.CSSProperties = { marginBottom: '0.7rem', padding: '0.55rem 0.7rem', borderRadius: '0.45rem', background: '#eff6ff', color: '#1d4ed8', fontSize: '1.1rem', fontWeight: 600 };
-const warningStyle: React.CSSProperties = { marginBottom: '0.7rem', padding: '0.55rem 0.7rem', borderRadius: '0.45rem', background: '#fff7ed', color: '#b45309', fontSize: '1.1rem', fontWeight: 700 };
-const clearButtonStyle: React.CSSProperties = { marginTop: '0.7rem', minHeight: 42, padding: '0 0.8rem', border: '1px solid #a8a29e', borderRadius: '0.45rem', background: '#fff', color: '#57534e', cursor: 'pointer', fontSize: '1rem', fontWeight: 700 };
-const chipsStyle: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '0.7rem' };
-const chipStyle: React.CSSProperties = { padding: '0.65rem 1rem', border: '2px solid', borderRadius: '999px', background: '#fafaf9', fontSize: '1.7rem', color: '#44403c' };
+const panelStyle: React.CSSProperties = { flex: '0 0 auto', marginBottom: '0.45rem', padding: '0.55rem 0.7rem', border: '1px solid #d6d3d1', borderRadius: '0.5rem', background: '#fff' };
+const headingStyle: React.CSSProperties = { fontSize: '1rem', lineHeight: 1.2, fontWeight: 700, color: '#292524', marginBottom: '0.35rem' };
+const modeStyle: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.45rem' };
+const modeButtonStyle: React.CSSProperties = { minHeight: 38, padding: '0 0.75rem', border: '1px solid #d6d3d1', borderRadius: '0.4rem', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 700 };
+const labelStyle: React.CSSProperties = { display: 'block', color: '#57534e', fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.25rem' };
+const inputStyle: React.CSSProperties = { display: 'block', width: '100%', minHeight: 64, padding: '0.4rem 0.55rem', border: '1px solid #a8a29e', borderRadius: '0.35rem', fontSize: '0.95rem', lineHeight: 1.3, color: '#292524', resize: 'vertical' };
+const analysisStyle: React.CSSProperties = { marginTop: '0.45rem' };
+const summaryStyle: React.CSSProperties = { fontSize: '0.9rem', lineHeight: 1.2, fontWeight: 700, marginBottom: '0.4rem' };
+const warningStyle: React.CSSProperties = { marginBottom: '0.45rem', padding: '0.35rem 0.5rem', borderRadius: '0.35rem', background: '#fff7ed', color: '#b45309', fontSize: '0.8rem', fontWeight: 700 };
+const clearButtonStyle: React.CSSProperties = { margin: '0.35rem 0.35rem 0 0', minHeight: 30, padding: '0 0.55rem', border: '1px solid #a8a29e', borderRadius: '0.35rem', background: '#fff', color: '#57534e', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700 };
+const chipsStyle: React.CSSProperties = { display: 'flex', flexWrap: 'wrap', gap: '0.35rem' };
+const chipStyle: React.CSSProperties = { padding: '0.25rem 0.45rem', border: '1px solid', borderRadius: '0.35rem', background: '#fafaf9', fontSize: '0.78rem', color: '#44403c' };
 const triadTableWrapperStyle: React.CSSProperties = { marginTop: '1rem', overflowX: 'auto' };
 const triadTableTitleStyle: React.CSSProperties = { marginBottom: '0.45rem', color: '#57534e', fontSize: '1.15rem', fontWeight: 700 };
 const triadTableStyle: React.CSSProperties = { width: '100%', minWidth: 420, borderCollapse: 'collapse', background: '#fafaf9', fontSize: '1rem' };

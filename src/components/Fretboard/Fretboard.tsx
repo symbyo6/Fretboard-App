@@ -177,11 +177,8 @@ export function Fretboard({
 
     const updateZoom = () => {
       const availableWidth = scrollContainerRef.current?.clientWidth ?? 0;
-      const availableHeight = scrollContainerRef.current?.clientHeight ?? 0;
-      if (availableWidth <= 0 || availableHeight <= 0) return;
-      const widthZoom = availableWidth / layout.totalWidth;
-      const heightZoom = availableHeight / layout.totalHeight;
-      const fitZoom = Math.min(widthZoom, heightZoom);
+      if (availableWidth <= 0) return;
+      const fitZoom = availableWidth / layout.totalWidth;
       setZoom(Math.min(1.6, fitZoom));
     };
 
@@ -406,8 +403,10 @@ export function Fretboard({
         ref={scrollContainerRef}
         className="fretboard-scroll-container"
         style={{
-          flex: 1,
+          flex: '0 1 auto',
+          height: layout.totalHeight * zoom + 16,
           minHeight: 0,
+          maxHeight: '100%',
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',

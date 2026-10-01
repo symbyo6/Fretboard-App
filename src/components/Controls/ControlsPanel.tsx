@@ -14,9 +14,6 @@ import { DegreeSelector } from './DegreeSelector';
 import { NotationAndChordToggles } from './NotationAndChordToggles';
 import { getNoteName, getScaleById } from '../../lib/theory/scales';
 import { useLanguage } from '../../i18n';
-import { ChordSequencePanel } from './ChordSequencePanel';
-import type { ParsedChordToken } from '../../lib/theory/chordSequence';
-import type { LinkedChordStep } from '../../lib/theory/voiceLeading';
 
 export interface ControlsPanelProps {
   rootPitch: PitchClass;
@@ -31,6 +28,8 @@ export interface ControlsPanelProps {
   onChordSelect: (degree: number) => void;
   playingChordLabel?: string | null;
   playingTabPositions?: { string: number; fret: number }[];
+  keepLastPlayed: boolean;
+  onKeepLastPlayedChange: (keep: boolean) => void;
   modeDegree: number;
   onModeDegreeChange: (degree: number) => void;
   modeDescriptions?: Record<number, string>;
@@ -46,16 +45,7 @@ export interface ControlsPanelProps {
   onDegreeLabelModeChange: (mode: DegreeLabelMode) => void;
   isMuted: boolean;
   onToggleMuted: () => void;
-  chordSequence: string;
-  onChordSequenceChange: (value: string) => void;
-  analyzedChordSequence: ParsedChordToken[];
-  linkedChordSequence: LinkedChordStep[];
   sequenceMode: 'diatonic' | 'linked';
-  onSequenceModeChange: (mode: 'diatonic' | 'linked') => void;
-  hasMixedChordTypes: boolean;
-  onClearChordSequence: () => void;
-  onTransposeChordSequence: () => void;
-  linkedSequenceUnavailable: boolean;
 }
 
 /** Detecta viewport angosto sin depender de hooks externos. */
@@ -87,6 +77,8 @@ export function ControlsPanel({
   onChordSelect,
   playingChordLabel,
   playingTabPositions,
+  keepLastPlayed,
+  onKeepLastPlayedChange,
   modeDegree,
   onModeDegreeChange,
   modeDescriptions,
@@ -102,16 +94,7 @@ export function ControlsPanel({
   onDegreeLabelModeChange,
   isMuted,
   onToggleMuted,
-  chordSequence,
-  onChordSequenceChange,
-  analyzedChordSequence,
-  linkedChordSequence,
   sequenceMode,
-  onSequenceModeChange,
-  hasMixedChordTypes,
-  onClearChordSequence,
-  onTransposeChordSequence,
-  linkedSequenceUnavailable,
 }: ControlsPanelProps): JSX.Element {
   const isCompact = useIsCompactViewport();
   const { language, setLanguage, t } = useLanguage();
@@ -135,6 +118,7 @@ export function ControlsPanel({
   return (
     <section
       aria-label={language === 'es' ? 'Panel de controles' : 'Controls panel'}
+      data-sequence-mode={sequenceMode}
       style={{
         background: 'white',
         borderRadius: '0.9rem',
@@ -149,6 +133,7 @@ export function ControlsPanel({
             <button
               key={option}
               type="button"
+              className="language-button"
               aria-pressed={language === option}
               onClick={() => setLanguage(option)}
               style={{
@@ -157,7 +142,7 @@ export function ControlsPanel({
                 color: language === option ? 'white' : '#292524',
               }}
             >
-              {option === 'es' ? t('spanish') : t('english')}
+                {option === 'es' ? t('spanish') : t('english')}
             </button>
           ))}
         </div>
@@ -194,20 +179,9 @@ export function ControlsPanel({
             onChange={onRootPitchChange}
           />
 
-          <ScaleSelector value={scaleId} onChange={onScaleIdChange} muted={sequenceMode === 'linked'} />
-
-          <ChordSequencePanel
-            value={chordSequence}
-            onChange={onChordSequenceChange}
-            analysis={analyzedChordSequence}
-            linkedSequence={linkedChordSequence}
-            hasMixedChordTypes={hasMixedChordTypes}
-            onClear={onClearChordSequence}
-            onTranspose={onTransposeChordSequence}
-            linkedSequenceUnavailable={linkedSequenceUnavailable}
-            sequenceMode={sequenceMode}
-            onSequenceModeChange={onSequenceModeChange}
-          />
+          {sequenceMode === 'diatonic' && (
+            <ScaleSelector value={scaleId} onChange={onScaleIdChange} />
+          )}
 
           <NotationAndChordToggles
             notationLabel={notationLabel}
@@ -222,6 +196,9 @@ export function ControlsPanel({
               onChordSelect={onChordSelect}
               playingChordLabel={playingChordLabel}
               playingTabPositions={playingTabPositions}
+              keepLastPlayed={keepLastPlayed}
+              onKeepLastPlayedChange={onKeepLastPlayedChange}
+              sequenceMode={sequenceMode}
               extendedChords={extendedChords}
               modeDegree={modeDegree}
               onModeDegreeChange={onModeDegreeChange}
@@ -232,7 +209,6 @@ export function ControlsPanel({
               onLabelModeChange={onDegreeLabelModeChange}
               isMuted={isMuted}
               onToggleMuted={onToggleMuted}
-              scaleControlsMuted={sequenceMode === 'linked'}
             />
           )}
         </div>

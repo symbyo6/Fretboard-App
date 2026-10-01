@@ -23,8 +23,6 @@ interface PlaybackControlsProps {
   onDrop3StringGroupChange: (group: 0 | 1) => void;
   onPlayingChange?: (isPlaying: boolean) => void;
   onUnlockAudio: () => Promise<void>;
-  keepLastPlayed: boolean;
-  onKeepLastPlayedChange: (keep: boolean) => void;
   sequenceDirection: SequenceDirection;
   onSequenceDirectionChange: (direction: SequenceDirection) => void;
   bpm: number;
@@ -32,7 +30,23 @@ interface PlaybackControlsProps {
   playbackMode: PlaybackMode;
   onPlaybackModeChange: (mode: PlaybackMode) => void;
   displayStringGroup?: string;
+  hideStringGroups?: boolean;
+  hideStepButtons?: boolean;
   label?: string;
+}
+
+export interface StringGroupSelectorProps extends Pick<PlaybackControlsProps,
+  'lowerString'
+  | 'upperString'
+  | 'onStringRangeChange'
+  | 'extendedChords'
+  | 'voicingType'
+  | 'drop3StringGroup'
+  | 'onDrop3StringGroupChange'
+  | 'displayStringGroup'
+> {
+  isPlaying: boolean;
+  variant?: 'playback' | 'below-fretboard';
 }
 
 /** Barra de reproducción para progresiones, escalas y voicings. */
@@ -49,8 +63,6 @@ export function PlaybackControls({
   onDrop3StringGroupChange,
   onPlayingChange,
   onUnlockAudio,
-  keepLastPlayed,
-  onKeepLastPlayedChange,
   sequenceDirection,
   onSequenceDirectionChange,
   bpm,
@@ -58,6 +70,8 @@ export function PlaybackControls({
   playbackMode,
   onPlaybackModeChange,
   displayStringGroup,
+  hideStringGroups = false,
+  hideStepButtons = false,
   label = 'Progresión',
 }: PlaybackControlsProps): JSX.Element {
   const { t } = useLanguage();
@@ -91,21 +105,6 @@ export function PlaybackControls({
       setAudioError(true);
     }
   };
-  const stringGroups = voicingType === 'drop3'
-    ? [
-      { id: 0 as const, label: '6-4-3-2', lower: 6, upper: 2 },
-      { id: 1 as const, label: '5-3-2-1', lower: 5, upper: 1 },
-    ]
-    : Array.from(
-      { length: 6 - (extendedChords ? 4 : 3) + 1 },
-      (_, index) => ({
-        id: index as 0 | 1,
-        label: `${6 - index}-${6 - index - (extendedChords ? 4 : 3) + 1}`,
-        lower: 6 - index,
-        upper: 6 - index - (extendedChords ? 4 : 3) + 1,
-      })
-    );
-
   return (
     <div style={panelStyle}>
       <div style={titleStyle}>
@@ -173,14 +172,6 @@ export function PlaybackControls({
             {direction === 'ascending' ? `↑ ${t('ascending')}` : `↓ ${t('descending')}`}
           </button>
         </div>
-          <label style={keepLastPlayedStyle}>
-          <input
-            type="checkbox"
-            checked={keepLastPlayed}
-            onChange={(event) => onKeepLastPlayedChange(event.target.checked)}
-          />
-          {t('keepLastTab')}
-        </label>
       </div>
 
       <div style={tempoRowStyle}>
@@ -200,41 +191,21 @@ export function PlaybackControls({
         />
       </div>
 
-      <div style={stringGroupsRowStyle} aria-label="Grupos de cuerdas">
-        <span style={tempoLabelStyle}>{t('groups')}</span>
-        {stringGroups.map((group) => {
-          const isSelected = displayStringGroup
-            ? displayStringGroup === `${group.lower}-${group.upper}`
-            : voicingType === 'drop3'
-              ? drop3StringGroup === group.id
-              : lowerString === group.lower && upperString === group.upper;
+      {!hideStringGroups && (
+        <StringGroupSelector
+          lowerString={lowerString}
+          upperString={upperString}
+          onStringRangeChange={onStringRangeChange}
+          extendedChords={extendedChords}
+          voicingType={voicingType}
+          drop3StringGroup={drop3StringGroup}
+          onDrop3StringGroupChange={onDrop3StringGroupChange}
+          displayStringGroup={displayStringGroup}
+          isPlaying={isPlaying}
+        />
+      )}
 
-          return (
-            <button
-              key={`${group.lower}-${group.upper}`}
-              type="button"
-              onClick={() => {
-                if (voicingType === 'drop3') onDrop3StringGroupChange(group.id);
-                else onStringRangeChange(group.lower, group.upper);
-              }}
-              disabled={isPlaying}
-              aria-pressed={isSelected}
-              title={`Cuerdas ${group.label}`}
-              style={{
-                ...stringGroupButtonStyle,
-                background: isSelected ? '#0f766e' : 'white',
-                color: isSelected ? 'white' : '#292524',
-                borderColor: isSelected ? '#0f766e' : '#d6d3d1',
-                opacity: isPlaying ? 0.6 : 1,
-              }}
-            >
-              {group.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {hasSteps && (
+      {hasSteps && !hideStepButtons && (
         <div style={stepsStyle}>
           {steps.map((step, index) => {
             const isActive = (currentIndex ?? selectedStepIndex) === index;
@@ -278,6 +249,77 @@ export function PlaybackControls({
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+export function StringGroupSelector({
+  lowerString,
+  upperString,
+  onStringRangeChange,
+  extendedChords,
+  voicingType,
+  drop3StringGroup,
+  onDrop3StringGroupChange,
+  displayStringGroup,
+  isPlaying,
+  variant = 'playback',
+}: StringGroupSelectorProps): JSX.Element {
+  const { t } = useLanguage();
+  const isBelowFretboard = variant === 'below-fretboard';
+  const stringGroups = voicingType === 'drop3'
+    ? [
+      { id: 0 as const, label: '6-4-3-2', lower: 6, upper: 2 },
+      { id: 1 as const, label: '5-3-2-1', lower: 5, upper: 1 },
+    ]
+    : Array.from(
+      { length: 6 - (extendedChords ? 4 : 3) + 1 },
+      (_, index) => ({
+        id: index as 0 | 1,
+        label: `${6 - index}-${6 - index - (extendedChords ? 4 : 3) + 1}`,
+        lower: 6 - index,
+        upper: 6 - index - (extendedChords ? 4 : 3) + 1,
+      })
+    );
+
+  return (
+    <div
+      className={isBelowFretboard ? 'string-groups-selector string-groups-below-fretboard' : 'string-groups-selector'}
+      style={isBelowFretboard ? stringGroupsBelowFretboardStyle : stringGroupsRowStyle}
+      aria-label="Grupos de cuerdas"
+    >
+      <span style={tempoLabelStyle}>{t('groups')}</span>
+      {stringGroups.map((group) => {
+        const isSelected = displayStringGroup
+          ? displayStringGroup === `${group.lower}-${group.upper}`
+          : voicingType === 'drop3'
+            ? drop3StringGroup === group.id
+            : lowerString === group.lower && upperString === group.upper;
+
+        return (
+          <button
+            key={`${group.lower}-${group.upper}`}
+            type="button"
+            onClick={() => {
+              if (voicingType === 'drop3') onDrop3StringGroupChange(group.id);
+              else onStringRangeChange(group.lower, group.upper);
+            }}
+            disabled={isPlaying}
+            aria-pressed={isSelected}
+            title={`Cuerdas ${group.label}`}
+            style={{
+              ...stringGroupButtonStyle,
+              ...(isBelowFretboard ? stringGroupBelowFretboardButtonStyle : {}),
+              background: isSelected ? '#0f766e' : 'white',
+              color: isSelected ? 'white' : '#292524',
+              borderColor: isSelected ? '#0f766e' : '#d6d3d1',
+              opacity: isPlaying ? 0.6 : 1,
+            }}
+          >
+            {group.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -327,17 +369,6 @@ const modeGroupStyle: React.CSSProperties = {
   gap: '0.4rem',
 };
 
-const keepLastPlayedStyle: React.CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '0.5rem',
-  minHeight: 'clamp(48px, 10vw, 58px)',
-  color: '#57534e',
-  fontSize: 'clamp(1.1rem, 3.8vw, 1.35rem)',
-  fontWeight: 700,
-  whiteSpace: 'nowrap',
-};
-
 const getModeButtonStyle = (isSelected: boolean, isPlaying: boolean): React.CSSProperties => ({
   minHeight: 'clamp(52px, 11vw, 62px)',
   padding: '0 clamp(0.7rem, 2.6vw, 1.2rem)',
@@ -378,6 +409,18 @@ const stringGroupsRowStyle: React.CSSProperties = {
   flexWrap: 'wrap',
   gap: '0.4rem',
   marginBottom: '0.7rem',
+};
+
+const stringGroupsBelowFretboardStyle: React.CSSProperties = {
+  ...stringGroupsRowStyle,
+  marginBottom: 0,
+  padding: '0 0.25rem',
+};
+
+const stringGroupBelowFretboardButtonStyle: React.CSSProperties = {
+  minWidth: 54,
+  minHeight: 42,
+  fontSize: '0.95rem',
 };
 
 const stringGroupButtonStyle: React.CSSProperties = {

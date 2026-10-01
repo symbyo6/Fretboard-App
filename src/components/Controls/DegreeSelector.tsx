@@ -13,6 +13,9 @@ interface DegreeSelectorProps {
   onChordSelect?: (degree: number) => void;
   playingChordLabel?: string | null;
   playingTabPositions?: { string: number; fret: number }[];
+  keepLastPlayed: boolean;
+  onKeepLastPlayedChange: (keep: boolean) => void;
+  sequenceMode: 'diatonic' | 'linked';
   extendedChords: boolean;
   modeDegree: number;
   onModeDegreeChange: (degree: number) => void;
@@ -35,6 +38,9 @@ export function DegreeSelector({
   onChordSelect,
   playingChordLabel,
   playingTabPositions = [],
+  keepLastPlayed,
+  onKeepLastPlayedChange,
+  sequenceMode,
   extendedChords,
   modeDegree,
   onModeDegreeChange,
@@ -45,7 +51,6 @@ export function DegreeSelector({
   onLabelModeChange,
   isMuted,
   onToggleMuted,
-  scaleControlsMuted = false,
 }: DegreeSelectorProps): JSX.Element {
   const { t } = useLanguage();
   const [internalLabelMode, setInternalLabelMode] = useState<DegreeLabelMode>(labelMode);
@@ -69,8 +74,12 @@ export function DegreeSelector({
   };
 
   return (
-    <div className="degree-selector-layout" aria-label="Selector de grado diatónico">
-      <div className="degree-selector-legend" style={{ ...legendHeaderStyle, ...(scaleControlsMuted ? mutedScaleControlStyle : {}) }}>
+    <div
+      className={`degree-selector-layout${sequenceMode === 'linked' ? ' degree-selector-linked' : ''}`}
+      aria-label="Selector de grado diatónico"
+    >
+      {sequenceMode === 'diatonic' && (
+      <div className="degree-selector-legend" style={legendHeaderStyle}>
         <div style={rangeWrapperStyle}>
           <span style={modeLegendStyle}>{t('scale')}</span>
           <div style={familyStyle} role="radiogroup" aria-label={t('scaleFundamental')}>
@@ -85,7 +94,7 @@ export function DegreeSelector({
                 role="radio"
                 aria-checked={modeFamily === family}
                 onClick={() => onModeFamilyChange(family)}
-                style={getRangeButtonStyle(modeFamily === family, false)}
+                style={getRangeButtonStyle(modeFamily === family)}
               >
                 {label}
               </button>
@@ -93,7 +102,9 @@ export function DegreeSelector({
           </div>
         </div>
       </div>
-      <div className="degree-selector-mode-buttons" style={{ ...headerStyle, ...(scaleControlsMuted ? mutedScaleControlStyle : {}) }}>
+      )}
+      {sequenceMode === 'diatonic' && (
+      <div className="degree-selector-mode-buttons" style={headerStyle}>
         <div style={rangeWrapperStyle}>
           <span style={modeLegendStyle}>{t('mode')}</span>
           <div style={rangeStyle}>
@@ -105,7 +116,7 @@ export function DegreeSelector({
                 aria-pressed={chord.degree === modeDegree}
                 title={modeDescriptions[chord.degree]}
                 onClick={() => onModeDegreeChange(chord.degree)}
-                style={getRangeButtonStyle(chord.degree === modeDegree, false)}
+                style={getRangeButtonStyle(chord.degree === modeDegree)}
               >
                 {modeDegreeLabels[chord.degree - 1]}
               </button>
@@ -125,6 +136,7 @@ export function DegreeSelector({
           </div>
         </div>
       </div>
+      )}
 
       <div className="degree-selector-audio">
         <button
@@ -156,6 +168,7 @@ export function DegreeSelector({
         </button>
       </div>
 
+      {sequenceMode === 'diatonic' && (
       <div className="degree-selector-red-buttons" style={chordRowStyle}>
         <div style={rangeWrapperStyle}>
           <span style={modeLegendStyle}>{t('diatonicDegrees')}</span>
@@ -182,7 +195,6 @@ export function DegreeSelector({
                 type="button"
                 role="radio"
                 aria-checked={isSelected}
-                disabled={scaleControlsMuted}
                 onClick={() => (onChordSelect ?? onChange)(chord.degree)}
                 style={{
                   minWidth: 'clamp(120px, 33vw, 168px)',
@@ -195,8 +207,7 @@ export function DegreeSelector({
                   color: isSelected ? 'white' : '#292524',
                   fontWeight: 700,
                   fontSize: 'clamp(2.16rem, 8.4vw, 3rem)',
-                  cursor: scaleControlsMuted ? 'not-allowed' : 'pointer',
-                  opacity: scaleControlsMuted ? 0.55 : 1,
+                  cursor: 'pointer',
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -216,26 +227,40 @@ export function DegreeSelector({
           </div>
         </div>
       </div>
+      )}
+      {sequenceMode === 'diatonic' && (
       <div className="degree-selector-summary" style={selectionSummaryRowStyle}>
         <div style={selectionSummaryStyle} aria-label="Tonalidad actual">
           <span style={selectionSummaryLabelStyle}>{t('tonality')}</span>
           <span style={selectionSummaryValueStyle}>{tonicName}</span>
         </div>
       </div>
+      )}
       <div className="degree-selector-playing" style={playingChordRowStyle} aria-live="polite">
         <div style={playingChordContentStyle}>
           <span style={playingChordLegendStyle}>{t('chordPlaying')}</span>
           <span style={playingChordStyle}>{playingChordLabel ?? '—'}</span>
-          <div style={liveTabStyle} aria-label="Tablatura del acorde sonando">
-            {Array.from({ length: 6 }, (_, index) => {
-              const string = index + 1;
-              const position = playingTabPositions.find((item) => item.string === string);
-              return (
-                <span key={string} style={liveTabStringStyle}>
-                  <span>{position ? position.fret : 'x'}</span>
-                </span>
-              );
-            })}
+          <div style={liveTabControlsStyle}>
+            <div style={liveTabStyle} aria-label="Tablatura del acorde sonando">
+              {Array.from({ length: 6 }, (_, index) => {
+                const string = index + 1;
+                const position = playingTabPositions.find((item) => item.string === string);
+                return (
+                  <span key={string} style={liveTabStringStyle}>
+                    <span>{position ? position.fret : 'x'}</span>
+                  </span>
+                );
+              })}
+            </div>
+            <label style={keepLastPlayedStyle}>
+              <input
+                type="checkbox"
+                checked={keepLastPlayed}
+                onChange={(event) => onKeepLastPlayedChange(event.target.checked)}
+                style={keepLastPlayedInputStyle}
+              />
+              {t('keepLastTab')}
+            </label>
           </div>
         </div>
       </div>
@@ -255,11 +280,6 @@ const legendHeaderStyle: React.CSSProperties = {
   flexDirection: 'column',
   gap: '0.35rem',
   marginBottom: '0.35rem',
-};
-
-const mutedScaleControlStyle: React.CSSProperties = {
-  opacity: 0.55,
-  filter: 'grayscale(1)',
 };
 
 const familyStyle: React.CSSProperties = {
@@ -284,7 +304,7 @@ const rangeStyle: React.CSSProperties = {
   color: '#78716c',
 };
 
-const getRangeButtonStyle = (isSelected: boolean, isDisabled: boolean): React.CSSProperties => ({
+const getRangeButtonStyle = (isSelected: boolean): React.CSSProperties => ({
   minWidth: 102,
   minHeight: 96,
   padding: '0 0.9rem',
@@ -294,8 +314,7 @@ const getRangeButtonStyle = (isSelected: boolean, isDisabled: boolean): React.CS
   color: isSelected ? 'white' : '#292524',
   fontSize: '2.16rem',
   fontWeight: 700,
-  cursor: isDisabled ? 'not-allowed' : 'pointer',
-  opacity: isDisabled ? 0.45 : 1,
+  cursor: 'pointer',
 });
 
 const modeLegendStyle: React.CSSProperties = {
@@ -340,9 +359,35 @@ const liveTabStyle: React.CSSProperties = {
   background: '#f0fdf4',
   color: '#166534',
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-  fontSize: '1.8rem',
+  fontSize: '3.6rem',
+  lineHeight: 1.1,
   fontWeight: 700,
   textAlign: 'center',
+};
+
+const liveTabControlsStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-end',
+  gap: '0.25rem',
+  width: '100%',
+};
+
+const keepLastPlayedStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: '0.5rem',
+  minHeight: 56,
+  color: '#57534e',
+  fontSize: '2.5rem',
+  fontWeight: 700,
+  whiteSpace: 'nowrap',
+};
+
+const keepLastPlayedInputStyle: React.CSSProperties = {
+  width: 48,
+  height: 48,
+  accentColor: '#0f766e',
 };
 
 const liveTabStringStyle: React.CSSProperties = {

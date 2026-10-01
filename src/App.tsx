@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react';
 import * as Tone from 'tone';
 import { ControlsPanel } from './components/Controls/ControlsPanel';
-import { PlaybackControls } from './components/Controls/PlaybackControls';
+import { ChordSequencePanel } from './components/Controls/ChordSequencePanel';
+import { PlaybackControls, StringGroupSelector } from './components/Controls/PlaybackControls';
 import { InversionControls } from './components/Controls/NotationAndChordToggles';
 import { Fretboard } from './components/Fretboard/Fretboard';
-import { getAllDiatonicChords, getChordToneSet, getScaleToneSet, toVoicing, type ChordVoicing, type ChordVoicingType } from './lib/theory/chords';
+import { getAllDiatonicChords, getChordToneIntervalLabels, getChordToneSet, getScaleToneSet, toVoicing, type ChordVoicing, type ChordVoicingType } from './lib/theory/chords';
 import { useAudioEngine } from './hooks/useAudioEngine';
 import { fretToNoteName } from './lib/audio/tuning';
 import { getAllPositionsForPitch, getPitchAtPosition, STANDARD_TUNING } from './lib/theory/fretboardPositions';
@@ -973,7 +974,6 @@ function App(): JSX.Element {
   );
   const selectedChord = chords.find((chord) => chord.degree === degree) ?? chords[0];
   const degreePentatonic = getMajorDegreePentatonic(scale, selectedChord?.degree ?? degree);
-  const chordIntervalLabels = getChordIntervalLabels(selectedChord);
   const chordToneSet = useMemo(
     () => selectedChord ? getChordToneSet(selectedChord) : new Set<PitchClass>(),
     [selectedChord]
@@ -1181,6 +1181,9 @@ function App(): JSX.Element {
     if (sequenceMode !== 'diatonic' || !activePlaybackStep) return selectedChord;
     return chords.find((chord) => chord.romanLabel === activePlaybackStep.label) ?? selectedChord;
   }, [activePlaybackStep, chords, selectedChord, sequenceMode]);
+  const displayedDegree = sequenceMode === 'diatonic' && (isSequencePlaying || activeStepIndex !== null) && activeDiatonicChord
+    ? activeDiatonicChord.degree
+    : degree;
   const isDiatonicPlaybackActive = sequenceMode === 'diatonic' && activePlaybackStep !== null;
   const activePlaybackChordToneSet = useMemo(() => (
     sequenceMode === 'linked' && activePlaybackStep
@@ -1563,6 +1566,9 @@ function App(): JSX.Element {
     setActiveStepIndex(index);
     setLinkedStepOverride(null);
     if (index !== null && activeProgressionSteps[index]) {
+      setLastChordPositionKeys(null);
+      setLastChordVoiceMidis(null);
+      setLastChordLowStringMidi(null);
       const step = activeProgressionSteps[index];
       lastPlayedProgressionStepRef.current = step;
       const linkedChord = sequenceMode === 'linked' ? linkedChordSequence[index]?.chord : null;
@@ -1574,12 +1580,29 @@ function App(): JSX.Element {
       const lastPlayedIndex = lastPlayedProgressionStepRef.current
         ? activeProgressionSteps.indexOf(lastPlayedProgressionStepRef.current)
         : -1;
-      if (lastPlayedIndex >= 0) {
+        if (keepLastPlayed && lastPlayedIndex >= 0) {
         setActiveStepIndex(lastPlayedIndex);
+          setPlayingChordLabel(lastPlayedProgressionStepRef.current?.label ?? null);
+        } else if (!keepLastPlayed) {
+          setActiveStepIndex(null);
+          setLastChordPositionKeys([]);
+          setLastChordVoiceMidis(null);
+          setLastChordLowStringMidi(null);
+          setPlayingChordLabel(null);
+        } else {
+          setActiveStepIndex(null);
+          setPlayingChordLabel(lastPlayedProgressionStepRef.current?.label ?? null);
       }
-      setPlayingChordLabel(lastPlayedProgressionStepRef.current?.label ?? null);
     }
-  }, [activeProgressionSteps, chords, linkedChordSequence, sequenceMode, useEnharmonicTonicName]);
+    }, [activeProgressionSteps, chords, keepLastPlayed, linkedChordSequence, sequenceMode, useEnharmonicTonicName]);
+
+    const handleSequenceStepPreview = useCallback((index: number) => {
+      const step = playbackProgressionSteps[index];
+      if (!step || isSequencePlaying) return;
+      setActiveNoteIndex(null);
+      handleStepChange(index);
+      void playPreviewChord(step.noteNames);
+    }, [handleStepChange, isSequencePlaying, playbackProgressionSteps, playPreviewChord]);
 
   const handleSequencePlayingChange = useCallback((isPlaying: boolean) => {
     setIsSequencePlaying(isPlaying);
@@ -1591,7 +1614,7 @@ function App(): JSX.Element {
     } else {
       const lastPlayedStep = lastPlayedProgressionStepRef.current
         ?? (activeStepIndex === null ? null : activeProgressionSteps[activeStepIndex]);
-      if (lastPlayedStep) {
+        if (lastPlayedStep && keepLastPlayed) {
         setLastChordPositionKeys(lastPlayedStep.positionKeys);
         setLastChordVoiceMidis(lastPlayedStep.noteNames.map((note) => Tone.Frequency(note).toMidi()));
         setLastChordLowStringMidi(lastPlayedStep.noteNames.length > 0
@@ -1602,9 +1625,9 @@ function App(): JSX.Element {
         setActiveStepIndex(lastPlayedIndex >= 0 ? lastPlayedIndex : null);
       } else {
         setActiveStepIndex(null);
-      }
-      if (!lastPlayedStep && !keepLastPlayed) {
-        setLastChordPositionKeys(null);
+          setLastChordPositionKeys([]);
+          setLastChordVoiceMidis(null);
+          setLastChordLowStringMidi(null);
         setPlayingChordLabel(null);
       }
     }
@@ -1911,6 +1934,10 @@ function App(): JSX.Element {
     tonicName, upperString, useEnharmonicTonicName, voicing, voicingType,
   ]);
 
+  const chordIntervalLabels = selectedChord
+    ? getChordToneIntervalLabels(scale, selectedChord).map(({ label }) => label)
+    : [];
+
   return (
     <main ref={appShellRef} className="app-shell">
       <section className="phase-one">
@@ -1929,7 +1956,7 @@ function App(): JSX.Element {
             </span>
           </div>
         )}
-        <div className="control-rail">
+        <div className={`control-rail${sequenceMode === 'linked' ? ' sequence-linked-mode' : ''}`}>
         <div className="current-state">
           <span>{selectedChord ? getDisplayedChordSymbol(selectedChord, useEnharmonicTonicName) : 'Sin acorde'}</span>
           <span>{selectedChord?.tones.map((tone) => getDisplayedNoteName(tone.noteName, useEnharmonicTonicName)).join(' - ')}</span>
@@ -1969,6 +1996,8 @@ function App(): JSX.Element {
           onChordSelect={handleChordSelect}
           playingChordLabel={playingChordLabel}
           playingTabPositions={playingTabPositions}
+          keepLastPlayed={keepLastPlayed}
+          onKeepLastPlayedChange={handleKeepLastPlayedChange}
           modeDegree={modeDegree}
           onModeDegreeChange={handleDegreeChange}
           modeDescriptions={modeDescriptions}
@@ -1984,29 +2013,7 @@ function App(): JSX.Element {
           onDegreeLabelModeChange={setDegreeLabelMode}
           isMuted={isMuted}
           onToggleMuted={() => { void toggleMuted(); }}
-          chordSequence={chordSequence}
-          onChordSequenceChange={handleChordSequenceChange}
-          analyzedChordSequence={analyzedChordSequence}
-          linkedChordSequence={linkedChordSequence}
-          hasMixedChordTypes={hasMixedChordTypes}
-          onClearChordSequence={() => {
-            setChordSequence('');
-            setSequenceMode('diatonic');
-          }}
-          onTransposeChordSequence={() => {
-            setChordSequence(transposeChordSequence(chordSequence, 2, effectiveNotation));
-            setLinkedSequenceOctaveOffset(0);
-          }}
-          linkedSequenceUnavailable={linkedSequenceUnavailable}
           sequenceMode={sequenceMode}
-          onSequenceModeChange={(mode) => {
-            setSequenceMode(mode);
-            if (mode === 'linked' && extendedChords && voicingType === 'closed') {
-              setVoicingType('drop2');
-              setVoicing('drop2-1');
-            }
-            if (mode === 'linked') setLinkedSequenceOctaveOffset(0);
-          }}
         />
         {supportsChordFunctions && (
           <PlaybackControls
@@ -2024,8 +2031,6 @@ function App(): JSX.Element {
             onDrop3StringGroupChange={handleDrop3StringGroupChange}
             onPlayingChange={handleSequencePlayingChange}
             onUnlockAudio={unlock}
-            keepLastPlayed={keepLastPlayed}
-            onKeepLastPlayedChange={handleKeepLastPlayedChange}
             sequenceDirection={sequenceDirection}
             onSequenceDirectionChange={setSequenceDirection}
             bpm={bpm}
@@ -2033,6 +2038,8 @@ function App(): JSX.Element {
             playbackMode={playbackMode}
             onPlaybackModeChange={setPlaybackMode}
             displayStringGroup={activePlaybackStep?.stringGroup}
+            hideStringGroups
+             hideStepButtons={sequenceMode === 'diatonic'}
             onStringRangeChange={handleStringGroupChange}
           />
         )}
@@ -2068,6 +2075,35 @@ function App(): JSX.Element {
         </div>
         <div className="fretboard-column">
         <h2>{t('fretboard')}</h2>
+        <ChordSequencePanel
+          value={chordSequence}
+          onChange={handleChordSequenceChange}
+          analysis={analyzedChordSequence}
+          linkedSequence={linkedChordSequence}
+          hasMixedChordTypes={hasMixedChordTypes}
+          onClear={() => {
+            setChordSequence('');
+            setSequenceMode('diatonic');
+          }}
+          onTranspose={(semitones) => {
+            setChordSequence(transposeChordSequence(chordSequence, semitones, effectiveNotation));
+            setLinkedSequenceOctaveOffset(0);
+          }}
+          linkedSequenceUnavailable={linkedSequenceUnavailable}
+          sequenceMode={sequenceMode}
+          playbackSteps={playbackProgressionSteps}
+          activeStepIndex={activeStepIndex}
+          isSequencePlaying={isSequencePlaying}
+          onStepPreview={handleSequenceStepPreview}
+          onSequenceModeChange={(mode) => {
+            setSequenceMode(mode);
+            if (mode === 'linked' && extendedChords && voicingType === 'closed') {
+              setVoicingType('drop2');
+              setVoicing('drop2-1');
+            }
+            if (mode === 'linked') setLinkedSequenceOctaveOffset(0);
+          }}
+        />
         <div className="fretboard-stage">
           <Fretboard
             rootPitch={KEY_TO_PITCH[key]}
@@ -2094,6 +2130,20 @@ function App(): JSX.Element {
             sequenceDiagramSteps={sequenceDiagramSteps}
           />
         </div>
+        {supportsChordFunctions && (
+          <StringGroupSelector
+            lowerString={lowerString}
+            upperString={upperString}
+            onStringRangeChange={handleStringGroupChange}
+            extendedChords={extendedChords}
+            voicingType={voicingType}
+            drop3StringGroup={drop3StringGroup}
+            onDrop3StringGroupChange={handleDrop3StringGroupChange}
+            displayStringGroup={activePlaybackStep?.stringGroup}
+            isPlaying={isSequencePlaying}
+            variant="below-fretboard"
+          />
+        )}
         </div>
       </section>
     </main>
