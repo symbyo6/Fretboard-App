@@ -4,6 +4,9 @@ node_modules/
 # Build output
 dist/
 build/
+/Fretboard-App-Standalone/electron.exe
+/release-current/win-unpacked/Fretboard App.exe
+/release-rebuild/win-unpacked/Fretboard App.exe
 
 # Environment
 .env
